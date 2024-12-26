@@ -2,7 +2,7 @@
 target_x_ : 10.0
 target_y_ : 0.0
 target_z_ : 0.0
-step_length_x_ : 0.3
+step_length_x_ : 0.2
 step_length_y_ : 0.0
 com_height_ : 0.71
 is_right_foot_swing_ : 1
@@ -19,4 +19,6 @@ t_temp_ : 2.0
 foot_height_ : 0.06 
 
 # ZMP CTRL
-kp_cp : 1.1
+kp_cp : 1.4
+
+zmp_offset : 0.02

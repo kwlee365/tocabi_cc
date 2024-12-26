@@ -12,17 +12,24 @@
 #include <iomanip>
 #include <iostream>
 
+#include <mpc.h>
+
 class CustomController
 {
 public:
     CustomController(RobotData &rd);
     Eigen::VectorQd getControl();
+    double getMpcFrequency() const;
 
     void computeSlow();
     void computeFast();
     void computeThread3();
     void computePlanner();
     void copyRobotData(RobotData &rd_l);
+    void pubDataSlowToThread3();
+    void subDataSlowToThread3();
+    void pubDataThread3ToSlow();
+    void subDataThread3ToSlow();
 
     RobotData &rd_;
     RobotData rd_cc_;
@@ -64,7 +71,14 @@ public:
     bool is_ssp  = false;
     bool is_dsp2 = false;
     bool is_preview_ctrl_init = true;
+    bool is_mpc_ctrl_init = true;
+    bool is_mpc_x_update = false;
+    bool is_mpc_y_update = false;
+
     std::atomic<bool> atb_grav_update_{false};
+    std::atomic<bool> atb_mpc_update_{false};
+    std::atomic<bool> atb_mpc_x_update_{false};
+    std::atomic<bool> atb_mpc_y_update_{false};
 
     // BIPED WALKING PARAMETER
     void walkingParameterSetting();
@@ -92,7 +106,7 @@ public:
     double t_ssp_;
     double t_dsp2_;
 
-    int current_step_num_;
+    int current_step_num_, current_step_container, current_step_thread3, current_step_checker;
     int total_step_num_;
 
     // BIPED WALKING CONTROL
@@ -112,13 +126,14 @@ public:
     void getComTrajectory(); 
     void previewcontroller(double dt, int NL, int tick, 
                            Eigen::Vector3d &x_k, Eigen::Vector3d &y_k, double &UX, double &UY,
-                           Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, 
-                           Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::MatrixXd C);
+                           const Eigen::MatrixXd &Gi, const Eigen::VectorXd &Gd, const Eigen::MatrixXd &Gx, 
+                           const Eigen::MatrixXd &A,  const Eigen::VectorXd &B,  const Eigen::MatrixXd &C);
     void preview_Parameter(double dt, int NL, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C);
+    void getComTrajectory_mpc();
     void getFootTrajectory(); 
     void getPelvTrajectory();
     void contactWrenchCalculator();
-    void computeIkControl(Eigen::Isometry3d float_trunk_transform, Eigen::Isometry3d float_lleg_transform, Eigen::Isometry3d float_rleg_transform, Eigen::Vector12d& desired_leg_q);
+    void computeIkControl(const Eigen::Isometry3d &float_trunk_transform, const Eigen::Isometry3d &float_lleg_transform, const Eigen::Isometry3d &float_rleg_transform, Eigen::Vector12d &q_des);
 
     Eigen::MatrixXd foot_step_;
     Eigen::MatrixXd foot_step_support_frame_;
@@ -135,6 +150,7 @@ public:
     Eigen::Vector3d cp_float_current_;
 
     Eigen::Vector3d com_desired_;
+    Eigen::Vector3d com_desired_dot_;
 
     Eigen::Vector3d com_support_init_;
     Eigen::Vector3d com_float_init_;
@@ -151,10 +167,10 @@ public:
     Eigen::Vector3d com_float_current_dot_LPF;
     Eigen::Vector3d com_support_current_dot_LPF;
 
-    Eigen::Vector3d pelv_rpy_current_mj_;
+    Eigen::Vector3d pelv_rpy_current_;
     Eigen::Vector3d rfoot_rpy_current_;
     Eigen::Vector3d lfoot_rpy_current_;
-    Eigen::Isometry3d pelv_yaw_rot_current_from_global_mj_;
+    Eigen::Isometry3d pelv_yaw_rot_current_from_global_;
     Eigen::Isometry3d rfoot_roll_rot_;
     Eigen::Isometry3d lfoot_roll_rot_;
     Eigen::Isometry3d rfoot_pitch_rot_;
@@ -215,6 +231,8 @@ public:
     Eigen::Vector6d swingfoot_support_init_;
     
     Eigen::MatrixXd ref_zmp_;
+    Eigen::MatrixXd ref_zmp_container;
+    Eigen::MatrixXd ref_zmp_thread3;
     
     int first_current_step_flag_ = 0;
     int first_current_step_number_ = 0;
@@ -286,6 +304,16 @@ public:
     Eigen::MatrixXd C_preview_;
     double UX_preview_, UY_preview_;
 
+    // MODEL PREDICTIVE CONTROL
+    Eigen::Vector3d x_mpc_, x_mpc_prev, x_mpc_container, x_mpc_container2, x_mpc_thread3;
+    Eigen::Vector3d y_mpc_, y_mpc_prev, y_mpc_container, y_mpc_container2, y_mpc_thread3;
+
+    Eigen::VectorXd zx_ref;
+    Eigen::VectorXd zy_ref;
+
+    unsigned int mpc_interpol_cnt_x = 0;
+    unsigned int mpc_interpol_cnt_y = 0;
+
     double del_t = 0.0005;
     double xi_preview_;
     double yi_preview_;
@@ -295,25 +323,28 @@ public:
     double ZMP_Y_REF_alpha_;
     double alpha_lpf_ = 0.0;
 
-    double zmp_start_time_; 
-    double zmp_modif_time_margin_;
-
     // CONTACT WRENCH CONTROL
-
-    Eigen::MatrixXd modified_del_zmp_; 
-    Eigen::MatrixXd m_del_zmp_x;
-    Eigen::MatrixXd m_del_zmp_y;
-
     Eigen::VectorQd swing_wrench_torque;
     Eigen::VectorQd contact_wrench_torque;
     Eigen::Vector6d rfoot_contact_wrench;
     Eigen::Vector6d lfoot_contact_wrench;
 
     double kp_cp = 0.0;
+    double zmp_offset = 0.0;
 
 private:
     Eigen::VectorQd ControlVal_;
     unsigned int walking_tick = 0;
+    unsigned int walking_tick_container = 0;
+    unsigned int walking_tick_thread3 = 0;
+
+    unsigned int zmp_start_time_ = 0; 
+    unsigned int zmp_start_time_container = 0; 
+    unsigned int zmp_start_time_thread3 = 0; 
+
     unsigned int initial_tick_ = 0;
     const double hz_ = 2000.0;
+
+    const double mpc_freq = 100.0;
+    const double mpc_N  = 200.0;
 };
