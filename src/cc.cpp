@@ -7,6 +7,9 @@ ofstream data3("/home/kwan/catkin_ws/src/tocabi_cc/data/data3.txt");
 ofstream data4("/home/kwan/catkin_ws/src/tocabi_cc/data/data4.txt");
 ofstream data5("/home/kwan/catkin_ws/src/tocabi_cc/data/data5.txt");
 ofstream data6("/home/kwan/catkin_ws/src/tocabi_cc/data/data6.txt");
+ofstream data7("/home/kwan/catkin_ws/src/tocabi_cc/data/data7.txt");
+ofstream data8("/home/kwan/catkin_ws/src/tocabi_cc/data/data8.txt");
+ofstream data9("/home/kwan/catkin_ws/src/tocabi_cc/data/data9.txt");
 
 CustomController::CustomController(RobotData &rd) : rd_(rd) 
 {
@@ -26,6 +29,8 @@ CustomController::CustomController(RobotData &rd) : rd_(rd)
     // {
     //     urdf_path = desc_package_path + "/dyros_tocabi.urdf";
     // }
+
+    // joy_sub_ = nh_cc_.subscribe<sensor_msgs::Joy>("/joy", 10, &CustomController::joyCallback, this);
 
     RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_d_, true, false);
     RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_c_, true, false);
@@ -79,6 +84,8 @@ void CustomController::computeSlow()
                 lfoot_contact_wrench.setZero();
                 rfoot_contact_wrench.setZero();
 
+                centroidalParameterCalculator();
+
                 cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
                 is_mode_7_init = false;
             }
@@ -92,10 +99,10 @@ void CustomController::computeSlow()
                 walkingStateMachine();
 
                 getZmpTrajectory();
-
-                // getComTrajectory(); 
-                getComTrajectory_mpc();
-
+                getComTrajectory(); 
+                
+                pubDataSlowToThread3();
+                
                 getFootTrajectory(); 
                 getPelvTrajectory();
                 supportToFloatPattern();
@@ -114,8 +121,8 @@ void CustomController::computeSlow()
                         q_ref_.segment(0, 12) = DyrosMath::cubicVector<12>(walking_tick, 0, 1.0 * hz_, q_init_.segment(0,12), q_leg_desired_, Eigen::Vector12d::Zero(), Eigen::Vector12d::Zero());
                 }
 
-                data1 << ZMP_X_REF_ << "," << com_desired_(0) << "," << com_support_current_(0) << "," << cp_desired_(0) << "," << cp_measured_(0) << "," << rfoot_trajectory_support_.translation()(0) << "," << rfoot_support_current_.translation()(0) << "," << lfoot_trajectory_support_.translation()(0) << "," << lfoot_support_current_.translation()(0) << std::endl;
-                data2 << ZMP_Y_REF_ << "," << com_desired_(1) << "," << com_support_current_(1) << "," << cp_desired_(1) << "," << cp_measured_(1) << "," << rfoot_trajectory_support_.translation()(1) << "," << rfoot_support_current_.translation()(1) << "," << lfoot_trajectory_support_.translation()(1) << "," << lfoot_support_current_.translation()(1) << std::endl;
+                data1 << ZMP_X_REF_ << "," << com_desired_(0) << "," << com_support_current_(0) << "," << cp_desired_(0) << "," << cp_measured_(0) << "," << rfoot_trajectory_support_.translation()(0) << "," << rfoot_support_current_.translation()(0) << "," << lfoot_trajectory_support_.translation()(0) << "," << lfoot_support_current_.translation()(0) << "," << zmp_preview_x << std::endl;
+                data2 << ZMP_Y_REF_ << "," << com_desired_(1) << "," << com_support_current_(1) << "," << cp_desired_(1) << "," << cp_measured_(1) << "," << rfoot_trajectory_support_.translation()(1) << "," << rfoot_support_current_.translation()(1) << "," << lfoot_trajectory_support_.translation()(1) << "," << lfoot_support_current_.translation()(1) << "," << zmp_preview_y << std::endl;
                 data3 << com_desired_(2) << "," << com_support_current_(2) << "," << rfoot_trajectory_support_.translation()(2) << "," << rfoot_support_current_.translation()(2) << "," << lfoot_trajectory_support_.translation()(2) << "," << lfoot_support_current_.translation()(2) << std::endl;
 
                 updateNextStepTime();
@@ -153,21 +160,32 @@ void CustomController::computeFast()
 
 void CustomController::computeThread3()
 {
-    static MPC mpc_(mpc_freq, mpc_N);
-    
+    static MPC mpc_(rd_, mpc_freq, mpc_N);
+
     if (rd_.tc_.mode == 7)
     {
         subDataSlowToThread3();
-
         int mpc_tick = walking_tick - zmp_start_time_;
-        
+
+        zx_ref.setZero(mpc_N);
+        zy_ref.setZero(mpc_N);
         for (int i = 0; i < mpc_N; i++)
         {
             zx_ref(i) = ref_zmp_thread3(mpc_tick + int(hz_ / mpc_freq) * i, 0);
             zy_ref(i) = ref_zmp_thread3(mpc_tick + int(hz_ / mpc_freq) * i, 1);
         }
 
-        mpc_.ComTrajectoryGenerator(zx_ref, zy_ref, x_mpc_thread3, y_mpc_thread3, com_height_);
+        if(walking_enable_ == true){
+            Eigen::IOFormat CleanFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, " ", " ");
+            data4 << zx_ref.transpose().format(CleanFmt) << std::endl;
+            data5 << zy_ref.transpose().format(CleanFmt) << std::endl;
+            data6 << com_x_ref_thread3.transpose().format(CleanFmt) << std::endl;
+            data7 << com_y_ref_thread3.transpose().format(CleanFmt) << std::endl;
+            data8 << zx_preview_thread3.transpose().format(CleanFmt) << std::endl;
+            data9 << zy_preview_thread3.transpose().format(CleanFmt) << std::endl;
+        }
+
+        mpc_.modelSRBD();
 
         pubDataThread3ToSlow();
     }
@@ -403,12 +421,20 @@ void CustomController::walkingParameterSetting()
 
     ros::param::get("/tocabi_controller/foot_height_", foot_height_);
 
+
+    // WALKING PATTERN GENERATOR
+    ros::param::get("/tocabi_controller/pred_footstep_num", pred_footstep_num);
+    ros::param::get("/tocabi_controller/pattern_poly_order", pattern_poly_order);
+
     // ZMP CTRL
     ros::param::get("/tocabi_controller/kp_cp", kp_cp);
 
     // ZMP OFFSET
     ros::param::get("/tocabi_controller/zmp_offset", zmp_offset);
 
+    // JOYSTICK
+    ros::param::get("/tocabi_controller/is_joystick_mode", is_joystick_mode);
+    
     t_rest_init_ = t_rest_init_ * hz_;
     t_rest_last_ = t_rest_last_ * hz_;
     t_double1_ = t_double1_ * hz_;
@@ -1209,7 +1235,7 @@ void CustomController::addZmpOffset()
 
     supportfoot_support_init_offset_ = supportfoot_support_init_;
 
-    if (foot_step_(0, 6) == 0) //right support foot
+    if (is_rfoot_support == true) //right support foot
     {
         supportfoot_support_init_offset_(1) = supportfoot_support_init_(1) + rfoot_zmp_offset_;
     }
@@ -1280,8 +1306,11 @@ void CustomController::zmpGenerator(const unsigned int norm_size, const unsigned
         }
     }
 
+    int last_index = ref_zmp_.col(0).size();
+
     if(current_step_num_ >= total_step_num_ - planning_step_num)
     {   
+
         for(unsigned int i = current_step_num_; i < total_step_num_; i++)
         {   
             onestepZmp(i, temp_px, temp_py);
@@ -1292,10 +1321,10 @@ void CustomController::zmpGenerator(const unsigned int norm_size, const unsigned
             index = index + t_total_;
         }
 
-        ref_zmp_.block(index, 0, 3 * hz_, 1).setConstant(ref_zmp_(index - 1, 0));
-        ref_zmp_.block(index, 1, 3 * hz_, 1).setConstant(ref_zmp_(index - 1, 1));
+        ref_zmp_.block(index, 0, last_index - index, 1).setConstant(ref_zmp_(index - 1, 0));
+        ref_zmp_.block(index, 1, last_index - index, 1).setConstant(ref_zmp_(index - 1, 1));
 
-        index = index + 3.0 * hz_; // Norm size must be larger than this addtional zmp size.
+        index = index + (last_index - index); // Norm size must be larger than this addtional zmp size.
     }
     else // reference ZMP during walking
     {       
@@ -1305,9 +1334,14 @@ void CustomController::zmpGenerator(const unsigned int norm_size, const unsigned
              
             ref_zmp_.block(index, 0, t_total_, 1) = temp_px; 
             ref_zmp_.block(index, 1, t_total_, 1) = temp_py;
-            
+
             index = index + t_total_;                                                          
         }
+
+        ref_zmp_.block(index, 0, last_index - index, 1).setConstant(ref_zmp_(index - 1, 0));
+        ref_zmp_.block(index, 1, last_index - index, 1).setConstant(ref_zmp_(index - 1, 1));
+
+        index = index + (last_index - index); // Norm size must be larger than this addtional zmp size.
     }
 }
 
@@ -1375,71 +1409,90 @@ void CustomController::onestepZmp(unsigned int current_step_number, Eigen::Vecto
         vT_y_dsp2 = (foot_step_support_frame_offset_(current_step_number - 1, 1) + foot_step_support_frame_offset_(current_step_number - 0, 1)) / 2.0;
     }
 
-    double lin_interpol = 0.0;
+    double interpol_func = 0.0;
     for (int i = 0; i < t_total_; i++)
     {
         if (i < t_dsp1_) 
         { 
-            lin_interpol = i / (t_dsp1_);
-            temp_px(i) = (1.0 - lin_interpol) * v0_x_dsp1 + lin_interpol * vT_x_dsp1;
-            temp_py(i) = (1.0 - lin_interpol) * v0_y_dsp1 + lin_interpol * vT_y_dsp1;
-            
-            // temp_px(i) = DyrosMath::cubic(i, 0.0, t_dsp1_, v0_x_dsp1, vT_x_dsp1, 0.0, 0.0);
-            // temp_py(i) = DyrosMath::cubic(i, 0.0, t_dsp1_, v0_y_dsp1, vT_y_dsp1, 0.0, 0.0);
+            interpol_func = computeInterpolationFunction(pattern_poly_order, i / hz_, t_dsp1_ / hz_);
+            temp_px(i) = (1.0 - interpol_func) * v0_x_dsp1 + interpol_func * vT_x_dsp1;
+            temp_py(i) = (1.0 - interpol_func) * v0_y_dsp1 + interpol_func * vT_y_dsp1;
         }
         else if (i >= t_dsp1_ && i < t_dsp1_ + t_ssp_)
         {
-            lin_interpol = (i - t_dsp1_) / t_ssp_;
-            temp_px(i) = (1.0 - lin_interpol) * v0_x_ssp + lin_interpol * vT_x_ssp;
-            temp_py(i) = (1.0 - lin_interpol) * v0_y_ssp + lin_interpol * vT_y_ssp;
-
-            // temp_px(i) = DyrosMath::cubic(i, t_dsp1_, t_dsp1_ + t_ssp_, v0_x_ssp, vT_x_ssp, 0.0, 0.0);
-            // temp_py(i) = DyrosMath::cubic(i, t_dsp1_, t_dsp1_ + t_ssp_, v0_y_ssp, vT_y_ssp, 0.0, 0.0);
+            interpol_func = computeInterpolationFunction(pattern_poly_order, (i - t_dsp1_) / hz_, t_ssp_ / hz_);
+            temp_px(i) = (1.0 - interpol_func) * v0_x_ssp  + interpol_func * vT_x_ssp;
+            temp_py(i) = (1.0 - interpol_func) * v0_y_ssp  + interpol_func * vT_y_ssp;
         }
         else
         {
-            lin_interpol = (i - t_dsp1_ - t_ssp_) / t_dsp2_;
-            temp_px(i) = (1.0 - lin_interpol) * v0_x_dsp2 + lin_interpol * vT_x_dsp2;
-            temp_py(i) = (1.0 - lin_interpol) * v0_y_dsp2 + lin_interpol * vT_y_dsp2;
-
-            // temp_px(i) = DyrosMath::cubic(i, t_dsp1_ + t_ssp_, t_total_, v0_x_dsp2, vT_x_dsp2, 0.0, 0.0);
-            // temp_py(i) = DyrosMath::cubic(i, t_dsp1_ + t_ssp_, t_total_, v0_y_dsp2, vT_y_dsp2, 0.0, 0.0);
+            interpol_func = computeInterpolationFunction(pattern_poly_order, (i - t_dsp1_ - t_ssp_) / hz_, t_dsp2_ / hz_);
+            temp_px(i) = (1.0 - interpol_func) * v0_x_dsp2 + interpol_func * vT_x_dsp2;
+            temp_py(i) = (1.0 - interpol_func) * v0_y_dsp2 + interpol_func * vT_y_dsp2;
         }
     }
+}
 
+double CustomController::computeInterpolationFunction(int poly_order, double t, double T)
+{
+    double f = 0.0;
+
+    if(poly_order == 1)
+    {
+        f = (t / T);
+    }
+    else if(poly_order == 3)
+    {
+        f = pow(t / T, 2) * (3.0  - 2 * (t / T));
+    }
+    else if(poly_order == 5)
+    {
+        f = pow(t / T, 3) * (10.0 - 15 * (t / T) + 6 * pow(t / T, 2));
+    }
+    else
+    {
+        std::cout << "Unsupported polynomial order! poly_order must be 1, 3, or 5." << std::endl;
+    }
+
+    return f;
 }
 
 void CustomController::getComTrajectory()
 {
     double dt_preview_ = 1.0 / hz_; // : sampling time of preview [s]
-    double NL_preview  = 3200;      // : number of preview horizons
+    double NL_preview_  = 4000;      // : number of preview horizons
 
     if (is_preview_ctrl_init == true)
     {
-        Gi_preview_.setZero();
-        Gd_preview_.setZero();
-        Gx_preview_.setZero();
-
-        preview_Parameter(dt_preview_, NL_preview, Gi_preview_, Gd_preview_, Gx_preview_, A_preview_, B_preview_, C_preview_);
+        preview_Parameter(dt_preview_, NL_preview_, Gi_preview_, Gd_preview_, Gx_preview_, A_preview_, B_preview_, C_preview_);
         
         x_preview_.setZero(); y_preview_.setZero(); 
         x_preview_(0) = com_support_init_(0);
         y_preview_(0) = com_support_init_(1);
-
+    
         UX_preview_ = 0;
         UY_preview_ = 0;
 
         std::cout << "PREVIEW PARAMETERS ARE SUCCESSFULLY INITIALIZED" << std::endl;
     }
 
-    previewcontroller(dt_preview_, NL_preview, walking_tick - zmp_start_time_, 
-                      x_preview_, y_preview_, UX_preview_, UY_preview_,
-                      Gi_preview_, Gd_preview_, Gx_preview_, 
-                      A_preview_, B_preview_, C_preview_);
-
     com_desired_(0) = x_preview_(0);
     com_desired_(1) = y_preview_(0);
     com_desired_(2) = com_height_;
+
+    cp_desired_(0) = x_preview_(0) + x_preview_(1) / wn; 
+    cp_desired_(1) = y_preview_(0) + y_preview_(1) / wn; 
+    
+    zmp_preview_x = (C_preview_ * x_preview_)(0);
+    zmp_preview_y = (C_preview_ * y_preview_)(0);
+    
+    previewcontroller(dt_preview_, NL_preview_, walking_tick - zmp_start_time_, 
+                      x_preview_, y_preview_, UX_preview_, UY_preview_,
+                      Gi_preview_, Gd_preview_, Gx_preview_, 
+                      A_preview_, B_preview_, C_preview_, 
+                      hz_, hz_, is_preview_ctrl_init);
+
+    getComTrajectory_mpc();
     
     if (walking_tick == t_start_ + t_total_ - 1 && current_step_num_ != total_step_num_ - 1)
     {
@@ -1476,6 +1529,64 @@ void CustomController::getComTrajectory()
         y_preview_(1) = com_vel(1);
         x_preview_(2) = com_acc(0);
         y_preview_(2) = com_acc(1);
+    }
+}
+
+void CustomController::getComTrajectory_mpc()
+{
+    double dt_preview_mpc = 1.0 / mpc_freq; // : sampling time of preview [s]
+    double NL_preview_mpc = mpc_N;          // : number of preview horizons
+
+    static bool is_preview_ctrl_init_mpc = true;
+
+    if (is_preview_ctrl_init_mpc == true)
+    {
+        com_x_ref.setZero(mpc_N); com_x_ref_container.setZero(mpc_N); com_x_ref_thread3.setZero(mpc_N);
+        com_y_ref.setZero(mpc_N); com_y_ref_container.setZero(mpc_N); com_y_ref_thread3.setZero(mpc_N);
+
+        com_dot_x_ref.setZero(mpc_N); com_dot_x_ref_container.setZero(mpc_N); com_dot_x_ref_thread3.setZero(mpc_N);
+        com_dot_y_ref.setZero(mpc_N); com_dot_y_ref_container.setZero(mpc_N); com_dot_y_ref_thread3.setZero(mpc_N);
+
+        dcm_x_ref.setZero(mpc_N); dcm_x_ref_container.setZero(mpc_N); dcm_x_ref_thread3.setZero(mpc_N);
+        dcm_y_ref.setZero(mpc_N); dcm_y_ref_container.setZero(mpc_N); dcm_y_ref_thread3.setZero(mpc_N);
+
+        zx_preview.setZero(mpc_N); zx_preview_container.setZero(mpc_N); zx_preview_thread3.setZero(mpc_N);
+        zy_preview.setZero(mpc_N); zy_preview_container.setZero(mpc_N); zy_preview_thread3.setZero(mpc_N);
+
+        preview_Parameter_MPC(dt_preview_mpc, NL_preview_mpc, Gi_preview_mpc, Gd_preview_mpc, Gx_preview_mpc, A_preview_mpc, B_preview_mpc, C_preview_mpc);
+        
+        std::cout << "MPC PREVIEW PARAMETERS ARE SUCCESSFULLY INITIALIZED" << std::endl;
+    }
+
+    UX_preview_mpc = UX_preview_;
+    UY_preview_mpc = UY_preview_;
+
+    x_preview_mpc = x_preview_; // from (k+1)
+    y_preview_mpc = y_preview_;
+
+    int mpc_local_time = walking_tick - zmp_start_time_;
+
+    for (int i = 0; i < NL_preview_mpc; i++)
+    {
+        previewcontroller(dt_preview_mpc, NL_preview_mpc, mpc_local_time, 
+                          x_preview_mpc, y_preview_mpc, UX_preview_mpc, UY_preview_mpc,
+                          Gi_preview_mpc, Gd_preview_mpc, Gx_preview_mpc, 
+                          A_preview_mpc, B_preview_mpc, C_preview_mpc, 
+                          mpc_freq, hz_, is_preview_ctrl_init_mpc);
+
+        com_x_ref(i) = x_preview_mpc(0);
+        com_y_ref(i) = y_preview_mpc(0);
+
+        com_dot_x_ref(i) = x_preview_mpc(1);
+        com_dot_y_ref(i) = y_preview_mpc(1);
+
+        dcm_x_ref(i) = x_preview_mpc(0) + x_preview_mpc(1) / wn;
+        dcm_y_ref(i) = y_preview_mpc(0) + y_preview_mpc(1) / wn; 
+
+        zx_preview(i) = (C_preview_mpc * x_preview_mpc)(0);
+        zy_preview(i) = (C_preview_mpc * y_preview_mpc)(0);
+
+        mpc_local_time += int(dt_preview_mpc * hz_); 
     }
 }
 
@@ -1606,20 +1717,152 @@ void CustomController::preview_Parameter(double dt, int NL, Eigen::MatrixXd &Gi,
     }
 }
 
+
+void CustomController::preview_Parameter_MPC(double dt, int NL, Eigen::MatrixXd &Gi, Eigen::VectorXd &Gd, Eigen::MatrixXd &Gx, Eigen::MatrixXd &A, Eigen::VectorXd &B, Eigen::MatrixXd &C)
+{
+    A.resize(3, 3);
+    A(0, 0) = 1.0;
+    A(0, 1) = dt;
+    A(0, 2) = dt * dt * 0.5;
+    A(1, 0) = 0;
+    A(1, 1) = 1.0;
+    A(1, 2) = dt;
+    A(2, 0) = 0;
+    A(2, 1) = 0;
+    A(2, 2) = 1;
+
+    B.resize(3);
+    B(0) = dt * dt * dt / 6;
+    B(1) = dt * dt / 2;
+    B(2) = dt;
+
+    C.resize(1, 3);
+    C(0, 0) = 1;
+    C(0, 1) = 0;
+    C(0, 2) = -com_height_ / GRAVITY;
+
+    Eigen::MatrixXd A_bar;
+    Eigen::VectorXd B_bar;
+
+    B_bar.setZero(4);
+    B_bar.segment(0, 1) = C * B;
+    B_bar.segment(1, 3) = B;
+
+    Eigen::Matrix1x4d B_bar_tran;
+    B_bar_tran = B_bar.transpose();
+
+    Eigen::MatrixXd I_bar;
+    Eigen::MatrixXd F_bar;
+    A_bar.setZero(4, 4);
+    I_bar.setZero(4, 1);
+    F_bar.setZero(4, 3);
+
+    F_bar.block<1, 3>(0, 0) = C * A;
+    F_bar.block<3, 3>(1, 0) = A;
+
+    I_bar.setZero();
+    I_bar(0, 0) = 1.0;
+
+    A_bar.block<4, 1>(0, 0) = I_bar;
+    A_bar.block<4, 3>(0, 1) = F_bar;
+
+    Eigen::MatrixXd Qe;
+    Qe.setZero(1, 1);
+    Qe(0, 0) = 1.0;
+
+    Eigen::MatrixXd R;
+    R.setZero(1, 1);
+    R(0, 0) = 0.000001;
+
+    Eigen::MatrixXd Qx;
+    Qx.setZero(3, 3);
+
+    Eigen::MatrixXd Q_bar;
+    Q_bar.setZero(3, 3);
+    Q_bar(0, 0) = Qe(0, 0);
+
+    Eigen::Matrix4d K; K.setZero();
+
+    K(0, 0) = 55.634723896852880;
+    K(0, 1) = 1.519793889590401e+03;
+    K(0, 2) = 4.167533635584495e+02;
+    K(0, 3) = 2.110392791741542;
+
+    K(1, 0) = 1.519793889590401e+03;
+    K(1, 1) = 4.287797707160152e+04;
+    K(1, 2) = 1.176325721953400e+04;
+    K(1, 3) = 60.992203746085570;
+    
+    K(2, 0) = 4.167533635584495e+02;
+    K(2, 1) = 1.176325721953400e+04;
+    K(2, 2) = 3.227257080000128e+03;
+    K(2, 3) = 16.758758788601690;
+    
+    K(3, 0) = 2.110392791741542;
+    K(3, 1) = 60.992203746085570;
+    K(3, 2) = 16.758758788601690;
+    K(3, 3) = 0.094122307101932;
+
+    Eigen::MatrixXd Temp_mat;
+    Eigen::MatrixXd Temp_mat_inv;
+    Eigen::MatrixXd Ac_bar;
+    Temp_mat.setZero(1, 1);
+    Temp_mat_inv.setZero(1, 1);
+    Ac_bar.setZero(4, 4);
+
+    Temp_mat = R + B_bar_tran * K * B_bar;
+    Temp_mat_inv = Temp_mat.inverse();
+
+    Ac_bar = A_bar - B_bar * Temp_mat_inv * B_bar_tran * K * A_bar;
+
+    Eigen::MatrixXd Ac_bar_tran(4, 4);
+    Ac_bar_tran = Ac_bar.transpose();
+
+    Gi.setZero(1, 1);
+    Gx.setZero(1, 3);
+    Gi(0, 0) = 5.195587210912763e+02; 
+
+    Gx(0, 0) = 2.890550599608730e+04;
+    Gx(0, 1) = 8.185276755932214e+03;
+    Gx(0, 2) = 1.134504988802484e+02;
+    Eigen::MatrixXd X_bar;
+    Eigen::Vector4d X_bar_col;
+    X_bar.setZero(4, NL);
+    X_bar_col.setZero();
+    X_bar_col = -Ac_bar_tran * K * I_bar;
+
+    for (int i = 0; i < NL; i++)
+    {
+        X_bar.block<4, 1>(0, i) = X_bar_col;
+        X_bar_col = Ac_bar_tran * X_bar_col;
+    }
+
+    Gd.setZero(NL);
+    Eigen::VectorXd Gd_col(1);
+    Gd_col(0) = -Gi(0, 0);
+
+    for (int i = 0; i < NL; i++)
+    {
+        Gd.segment(i, 1) = Gd_col;
+        Gd_col = Temp_mat_inv * B_bar_tran * X_bar.col(i);
+    }
+}
+
 void CustomController::previewcontroller(double dt, int NL, int tick, 
                                          Eigen::Vector3d &x_k, Eigen::Vector3d &y_k, double &UX, double &UY,
                                          const Eigen::MatrixXd &Gi, const Eigen::VectorXd &Gd, const Eigen::MatrixXd &Gx, 
-                                         const Eigen::MatrixXd &A,  const Eigen::VectorXd &B,  const Eigen::MatrixXd &C)
+                                         const Eigen::MatrixXd &A,  const Eigen::VectorXd &B,  const Eigen::MatrixXd &C, 
+                                         int controller_hz, int main_hz, bool &is_ctrl_init)
 {
     Eigen::Vector3d x_k_prev_; x_k_prev_.setZero();
     Eigen::Vector3d y_k_prev_; y_k_prev_.setZero();
 
-    if(is_preview_ctrl_init == true)
+    if(is_ctrl_init == true)
     {
         x_k_prev_ = x_k;
         y_k_prev_ = y_k; // To prevent the ZMP overshooting.
 
-        is_preview_ctrl_init = false;
+        is_ctrl_init = false;
     }
     else
     {
@@ -1637,10 +1880,11 @@ void CustomController::previewcontroller(double dt, int NL, int tick,
     py.setZero(1); py = C * y_k;
 
     double sum_Gd_px_ref = 0, sum_Gd_py_ref = 0;
+
     for (int i = 0; i < NL; i++)
     {
-        sum_Gd_px_ref = sum_Gd_px_ref + Gd(i) * (ref_zmp_(tick + 1 + i,0) - ref_zmp_(tick + i,0));
-        sum_Gd_py_ref = sum_Gd_py_ref + Gd(i) * (ref_zmp_(tick + 1 + i,1) - ref_zmp_(tick + i,1));
+        sum_Gd_px_ref = sum_Gd_px_ref + Gd(i) * (ref_zmp_(tick + (1 + i) * int(main_hz / controller_hz), 0) - ref_zmp_(tick + (i) * int(main_hz / controller_hz), 0));
+        sum_Gd_py_ref = sum_Gd_py_ref + Gd(i) * (ref_zmp_(tick + (1 + i) * int(main_hz / controller_hz), 1) - ref_zmp_(tick + (i) * int(main_hz / controller_hz), 1));
     }
 
     Eigen::MatrixXd del_ux; del_ux.setZero(1, 1);
@@ -1656,107 +1900,9 @@ void CustomController::previewcontroller(double dt, int NL, int tick,
 
     UX = UX + del_ux(0, 0);
     UY = UY + del_uy(0, 0);
-
+    
     x_k = A * x_k + B * UX;
     y_k = A * y_k + B * UY;    
-
-    cp_desired_(0) = x_k(0) + x_k(1) / wn;
-    cp_desired_(1) = y_k(0) + y_k(1) / wn; 
-}
-
-void CustomController::getComTrajectory_mpc()
-{
-    if(is_mpc_ctrl_init == true)
-    {
-        x_mpc_.setZero(); x_mpc_(0) = com_support_init_(0);
-        x_mpc_thread3.setZero(); x_mpc_thread3(0) = com_support_init_(0);
-        y_mpc_.setZero(); y_mpc_(0) = com_support_init_(1); 
-        y_mpc_thread3.setZero(); y_mpc_thread3(0) = com_support_init_(1);
-
-        zx_ref.setZero(mpc_N); 
-        zy_ref.setZero(mpc_N); 
-
-        is_mpc_ctrl_init = false;
-    }
-
-    pubDataSlowToThread3();
-    subDataThread3ToSlow();
-
-    double x_com_lin_spline = (mpc_freq / hz_) * mpc_interpol_cnt_x;
-    double y_com_lin_spline = (mpc_freq / hz_) * mpc_interpol_cnt_y;
-
-    com_desired_(0) = x_com_lin_spline * (x_mpc_(0) - x_mpc_prev(0)) + x_mpc_prev(0);
-    com_desired_(1) = x_com_lin_spline * (y_mpc_(0) - y_mpc_prev(0)) + y_mpc_prev(0);
-    com_desired_(2) = com_height_;
-
-    com_desired_dot_(0) = x_com_lin_spline * (x_mpc_(1) - x_mpc_prev(1)) + x_mpc_prev(1);
-    com_desired_dot_(1) = x_com_lin_spline * (y_mpc_(1) - y_mpc_prev(1)) + y_mpc_prev(1);
-    com_desired_dot_(2) = 0.0;
-    
-    cp_desired_ = (com_desired_ + com_desired_dot_ / wn).segment(0, 2);
-
-    mpc_interpol_cnt_x ++;
-    mpc_interpol_cnt_y ++;
-
-    if (walking_tick == t_start_ + t_total_ - 1 && current_step_num_ != total_step_num_ - 1)
-    {
-        Eigen::Vector3d com_pos_prev;
-        Eigen::Vector3d com_pos;
-        Eigen::Vector3d com_vel_prev;
-        Eigen::Vector3d com_vel;
-        Eigen::Vector3d com_acc_prev;
-        Eigen::Vector3d com_acc;
-        Eigen::Matrix3d temp_rot;
-        Eigen::Vector3d temp_pos;
-
-        temp_rot = DyrosMath::rotateWithZ(-foot_step_support_frame_(current_step_num_, 5));
-        for (int i = 0; i < 3; i++)
-            temp_pos(i) = foot_step_support_frame_(current_step_num_, i);
-        
-        // CURRENT COM TRAJ
-        com_pos_prev(0) = x_mpc_(0);
-        com_pos_prev(1) = y_mpc_(0);
-        com_pos = temp_rot * (com_pos_prev - temp_pos);
-
-        com_vel_prev(0) = x_mpc_(1);
-        com_vel_prev(1) = y_mpc_(1);
-        com_vel_prev(2) = 0.0;
-        com_vel = temp_rot * com_vel_prev;
-
-        com_acc_prev(0) = x_mpc_(2);
-        com_acc_prev(1) = y_mpc_(2);
-        com_acc_prev(2) = 0.0;
-        com_acc = temp_rot * com_acc_prev;
-
-        x_mpc_(0) = com_pos(0);
-        y_mpc_(0) = com_pos(1);
-        x_mpc_(1) = com_vel(0);
-        y_mpc_(1) = com_vel(1);
-        x_mpc_(2) = com_acc(0);
-        y_mpc_(2) = com_acc(1);
-
-        // PREVIOUS COM TRAJ
-        com_pos_prev(0) = x_mpc_prev(0);
-        com_pos_prev(1) = y_mpc_prev(0);
-        com_pos = temp_rot * (com_pos_prev - temp_pos);
-
-        com_vel_prev(0) = x_mpc_prev(1);
-        com_vel_prev(1) = y_mpc_prev(1);
-        com_vel_prev(2) = 0.0;
-        com_vel = temp_rot * com_vel_prev;
-
-        com_acc_prev(0) = x_mpc_prev(2);
-        com_acc_prev(1) = y_mpc_prev(2);
-        com_acc_prev(2) = 0.0;
-        com_acc = temp_rot * com_acc_prev;
-
-        x_mpc_prev(0) = com_pos(0);
-        y_mpc_prev(0) = com_pos(1);
-        x_mpc_prev(1) = com_vel(0);
-        y_mpc_prev(1) = com_vel(1);
-        x_mpc_prev(2) = com_acc(0);
-        y_mpc_prev(2) = com_acc(1);
-    }
 }
 
 void CustomController::getFootTrajectory() 
@@ -2042,8 +2188,17 @@ void CustomController::pubDataSlowToThread3()
         current_step_container = current_step_num_;
         ref_zmp_container = ref_zmp_;
 
-        x_mpc_container = x_mpc_;
-        y_mpc_container = y_mpc_;
+        com_x_ref_container = com_x_ref;
+        com_y_ref_container = com_y_ref;
+
+        com_dot_x_ref_container = com_dot_x_ref;
+        com_dot_y_ref_container = com_dot_y_ref;
+
+        dcm_x_ref_container = dcm_x_ref;
+        dcm_y_ref_container = dcm_y_ref;
+
+        zx_preview_container = zx_preview;
+        zy_preview_container = zy_preview;
 
         atb_mpc_update_ = false;
     }
@@ -2061,8 +2216,17 @@ void CustomController::subDataSlowToThread3()
 
         ref_zmp_thread3 = ref_zmp_container;
 
-        x_mpc_thread3 = x_mpc_container;
-        y_mpc_thread3 = y_mpc_container;
+        com_x_ref_thread3 = com_x_ref_container;
+        com_y_ref_thread3 = com_y_ref_container;
+
+        com_dot_x_ref_thread3 = com_dot_x_ref_container;
+        com_dot_y_ref_thread3 = com_dot_y_ref_container;
+
+        dcm_x_ref_thread3 = dcm_x_ref_container;
+        dcm_y_ref_thread3 = dcm_y_ref_container;
+
+        zx_preview_thread3 = zx_preview_container;
+        zy_preview_thread3 = zy_preview_container;
 
         atb_mpc_update_ = false;
     }
@@ -2074,8 +2238,6 @@ void CustomController::pubDataThread3ToSlow()
     {
         atb_mpc_x_update_ = true;
         
-        x_mpc_container2 = x_mpc_thread3;
-
         current_step_checker = current_step_thread3;
 
         atb_mpc_x_update_ = false;
@@ -2087,8 +2249,6 @@ void CustomController::pubDataThread3ToSlow()
     {
         atb_mpc_y_update_ = true;
         
-        y_mpc_container2 = y_mpc_thread3;
-
         current_step_checker = current_step_thread3;
 
         atb_mpc_y_update_ = false;
@@ -2099,57 +2259,62 @@ void CustomController::pubDataThread3ToSlow()
 
 void CustomController::subDataThread3ToSlow()
 {
-    if (is_mpc_x_update == true)
-    {
-        if (atb_mpc_x_update_ == false)
-        {
-            atb_mpc_x_update_ = true;
+    // if (is_mpc_x_update == true)
+    // {
+    //     if (atb_mpc_x_update_ == false)
+    //     {
+    //         atb_mpc_x_update_ = true;
             
-            x_mpc_prev = x_mpc_;
+    //         x_mpc_prev = x_mpc_;
             
-            if (current_step_checker == current_step_num_)
-            {
-                x_mpc_ = x_mpc_container2;
+    //         if (current_step_checker == current_step_num_)
+    //         {
+    //             x_mpc_ = x_mpc_container2;
 
-                mpc_interpol_cnt_x = 1;
-            }
-            else
-            {
-                std::cout << "MPC output X is ignored: step number mismatch (MPC step = " 
-                        << current_step_checker << ", real-time step = " 
-                        << current_step_num_ << ")." << std::endl;
-            }
+    //             mpc_interpol_cnt_x = 1;
+    //         }
+    //         else
+    //         {
+    //             std::cout << "MPC output X is ignored: step number mismatch (MPC step = " 
+    //                     << current_step_checker << ", real-time step = " 
+    //                     << current_step_num_ << ")." << std::endl;
+    //         }
 
-            atb_mpc_x_update_ = false;
-        }
+    //         atb_mpc_x_update_ = false;
+    //     }
         
-        is_mpc_x_update = false;
-    }
+    //     is_mpc_x_update = false;
+    // }
 
-    if (is_mpc_y_update == true)
-    {
-        if (atb_mpc_y_update_ == false)
-        {
-            atb_mpc_y_update_ = true;
+    // if (is_mpc_y_update == true)
+    // {
+    //     if (atb_mpc_y_update_ == false)
+    //     {
+    //         atb_mpc_y_update_ = true;
 
-            y_mpc_prev = y_mpc_;
+    //         y_mpc_prev = y_mpc_;
 
-            if (current_step_checker == current_step_num_)
-            {
-                y_mpc_ = y_mpc_container2;
+    //         if (current_step_checker == current_step_num_)
+    //         {
+    //             y_mpc_ = y_mpc_container2;
 
-                mpc_interpol_cnt_y = 1;
-            }
-            else
-            {
-                std::cout << "MPC output Y is ignored: step number mismatch (MPC step = " 
-                        << current_step_checker << ", real-time step = " 
-                        << current_step_num_ << ")." << std::endl;
-            }
+    //             mpc_interpol_cnt_y = 1;
+    //         }
+    //         else
+    //         {
+    //             std::cout << "MPC output Y is ignored: step number mismatch (MPC step = " 
+    //                     << current_step_checker << ", real-time step = " 
+    //                     << current_step_num_ << ")." << std::endl;
+    //         }
 
-            atb_mpc_y_update_ = false;
-        }
+    //         atb_mpc_y_update_ = false;
+    //     }
 
-        is_mpc_y_update = false;
-    }
+    //     is_mpc_y_update = false;
+    // }
+}
+
+void CustomController::centroidalParameterCalculator()
+{
+    
 }

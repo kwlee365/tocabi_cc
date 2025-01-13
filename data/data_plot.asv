@@ -2,66 +2,56 @@ clc
 clear all
 close all
 
-% data1 = readmatrix('data1.txt')
-% figure(1)
-% plot(data1(:,1))
-% hold on
-% grid on
-% plot(data1(:,2))
-% plot(data1(:,3))
-% % plot(data1(:,4))
-% % plot(data1(:,5))
-% legend()
-% ylim([-1 1])
-% 
-% data2 = readmatrix('data2.txt')
-% figure(2)
-% plot(data2(:,1))
-% hold on
-% grid on
-% plot(data2(:,2))
-% plot(data2(:,3))
-% % plot(data2(:,4))
-% % plot(data2(:,5))
-% legend()
-% ylim([-1 1])
+data1 = readmatrix('data1.txt')
+figure(1)
+plot(data1(:,1))
+hold on
+grid on
+plot(data1(:,2))
+plot(data1(:,3))
+% plot(data1(:,4))
+% plot(data1(:,5))
+plot(data1(:,10))
+legend()  
+ylim([-1 1])
+
+data2 = readmatrix('data2.txt')
+figure(2)
+plot(data2(:,1))
+hold on
+grid on
+plot(data2(:,2))
+plot(data2(:,3))
+% plot(data2(:,4))
+% plot(data2(:,5))
+plot(data2(:,10))
+legend()
+ylim([-1 1])
+ 
+%%
+
+data4 = readmatrix('data4.txt');
+data5 = readmatrix('data5.txt');
+data6 = readmatrix('data6.txt');
+data7 = readmatrix('data7.txt');
+data8 = readmatrix('data8.txt');
+data9 = readmatrix('data9.txt');
 
 %
-
-dataMPC_zmp_x = readmatrix('dataMPC_zmp_x.txt')
-dataMPC_zmp_y = readmatrix('dataMPC_zmp_y.txt')
-dataMPC_com_x = readmatrix('dataMPC_com_x.txt')
-dataMPC_com_y = readmatrix('dataMPC_com_y.txt')
-
-mpc_tick = 130
-
+close all
+mpc_tick = 150
 figure()
-plot(dataMPC_zmp_x(mpc_tick,:))
+subplot(2,1,1)
+plot(data4(mpc_tick,:));
 hold on
 grid on
-plot(dataMPC_com_x(mpc_tick,:))
+plot(data6(mpc_tick,:));
+plot(data8(mpc_tick,:));
 legend()
-
-figure()
-plot(dataMPC_zmp_y(mpc_tick,:))
+subplot(2,1,2)
+plot(data5(mpc_tick,:))
 hold on
 grid on
-plot(dataMPC_com_y(mpc_tick,:))
+plot(data7(mpc_tick,:));
+plot(data9(mpc_tick,:));
 legend()
-
-
-% figure()
-% plot(data3(:,1))
-% hold on
-% grid on
-% plot(data3(:,2))
-% legend()
-% % 
-% figure()
-% plot(data3(:,3))
-% hold on
-% grid on
-% plot(data3(:,4))
-% plot(data3(:,5))
-% plot(data3(:,6))
-% legend()

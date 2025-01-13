@@ -12,7 +12,9 @@
 #include <iomanip>
 #include <iostream>
 
+#include <filesystem>
 #include <mpc.h>
+#include <sensor_msgs/Joy.h>
 
 class CustomController
 {
@@ -31,11 +33,14 @@ public:
     void pubDataThread3ToSlow();
     void subDataThread3ToSlow();
 
+    int is_mode6_start = 0;
+
     RobotData &rd_;
     RobotData rd_cc_;
 
     ros::NodeHandle nh_cc_;
     ros::CallbackQueue queue_cc_;
+    // ros::Subscriber joy_sub_;
 
     // ROBOT 
     RigidBodyDynamics::Model model_d_;  //updated by desired q
@@ -109,6 +114,8 @@ public:
     int current_step_num_, current_step_container, current_step_thread3, current_step_checker;
     int total_step_num_;
 
+    int pattern_poly_order = 1;
+
     // BIPED WALKING CONTROL
     void updateInitialState();
     void getRobotState();
@@ -122,14 +129,17 @@ public:
     void addZmpOffset();
     void zmpGenerator(const unsigned int norm_size, const unsigned planning_step_num);
     void onestepZmp(unsigned int current_step_number, Eigen::VectorXd &temp_px, Eigen::VectorXd &temp_py);
+    double computeInterpolationFunction(int poly_order, double t, double T);
 
     void getComTrajectory(); 
+    void getComTrajectory_mpc();
     void previewcontroller(double dt, int NL, int tick, 
                            Eigen::Vector3d &x_k, Eigen::Vector3d &y_k, double &UX, double &UY,
                            const Eigen::MatrixXd &Gi, const Eigen::VectorXd &Gd, const Eigen::MatrixXd &Gx, 
-                           const Eigen::MatrixXd &A,  const Eigen::VectorXd &B,  const Eigen::MatrixXd &C);
+                           const Eigen::MatrixXd &A,  const Eigen::VectorXd &B,  const Eigen::MatrixXd &C,
+                           int controller_hz, int main_hz, bool &is_ctrl_init);
     void preview_Parameter(double dt, int NL, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C);
-    void getComTrajectory_mpc();
+    void preview_Parameter_MPC(double dt, int NL, Eigen::MatrixXd &Gi, Eigen::VectorXd &Gd, Eigen::MatrixXd &Gx, Eigen::MatrixXd &A, Eigen::VectorXd &B, Eigen::MatrixXd &C);
     void getFootTrajectory(); 
     void getPelvTrajectory();
     void contactWrenchCalculator();
@@ -233,7 +243,39 @@ public:
     Eigen::MatrixXd ref_zmp_;
     Eigen::MatrixXd ref_zmp_container;
     Eigen::MatrixXd ref_zmp_thread3;
-    
+
+    Eigen::VectorXd dcm_x_ref;
+    Eigen::VectorXd dcm_x_ref_container;
+    Eigen::VectorXd dcm_x_ref_thread3; 
+    Eigen::VectorXd dcm_y_ref;
+    Eigen::VectorXd dcm_y_ref_container;
+    Eigen::VectorXd dcm_y_ref_thread3; 
+
+    Eigen::VectorXd com_x_ref;
+    Eigen::VectorXd com_x_ref_container;
+    Eigen::VectorXd com_x_ref_thread3; 
+    Eigen::VectorXd com_y_ref;
+    Eigen::VectorXd com_y_ref_container;
+    Eigen::VectorXd com_y_ref_thread3; 
+
+    Eigen::VectorXd com_dot_x_ref;
+    Eigen::VectorXd com_dot_x_ref_container;
+    Eigen::VectorXd com_dot_x_ref_thread3; 
+    Eigen::VectorXd com_dot_y_ref;
+    Eigen::VectorXd com_dot_y_ref_container;
+    Eigen::VectorXd com_dot_y_ref_thread3; 
+
+    Eigen::VectorXd zx_ref;
+    Eigen::VectorXd zy_ref;
+
+    Eigen::VectorXd zx_preview;
+    Eigen::VectorXd zx_preview_container;
+    Eigen::VectorXd zx_preview_thread3;
+
+    Eigen::VectorXd zy_preview;
+    Eigen::VectorXd zy_preview_container;
+    Eigen::VectorXd zy_preview_thread3;
+
     int first_current_step_flag_ = 0;
     int first_current_step_number_ = 0;
 
@@ -305,19 +347,24 @@ public:
     double UX_preview_, UY_preview_;
 
     // MODEL PREDICTIVE CONTROL
-    Eigen::Vector3d x_mpc_, x_mpc_prev, x_mpc_container, x_mpc_container2, x_mpc_thread3;
-    Eigen::Vector3d y_mpc_, y_mpc_prev, y_mpc_container, y_mpc_container2, y_mpc_thread3;
+    Eigen::Vector3d x_preview_mpc;
+    Eigen::Vector3d y_preview_mpc;
 
-    Eigen::VectorXd zx_ref;
-    Eigen::VectorXd zy_ref;
+    Eigen::MatrixXd Gi_preview_mpc;
+    Eigen::MatrixXd Gx_preview_mpc;
+    Eigen::VectorXd Gd_preview_mpc;
+    Eigen::MatrixXd A_preview_mpc;
+    Eigen::VectorXd B_preview_mpc;
+    Eigen::MatrixXd C_preview_mpc;
+    double UX_preview_mpc, UY_preview_mpc;
+
+    double zmp_preview_x = 0.0;
+    double zmp_preview_y = 0.0;
 
     unsigned int mpc_interpol_cnt_x = 0;
     unsigned int mpc_interpol_cnt_y = 0;
 
     double del_t = 0.0005;
-    double xi_preview_;
-    double yi_preview_;
-    double zc_preview_;
     double ZMP_X_REF_;
     double ZMP_Y_REF_;
     double ZMP_Y_REF_alpha_;
@@ -332,6 +379,9 @@ public:
     double kp_cp = 0.0;
     double zmp_offset = 0.0;
 
+    int pred_footstep_num = 0;
+    
+    void centroidalParameterCalculator();
 private:
     Eigen::VectorQd ControlVal_;
     unsigned int walking_tick = 0;
@@ -345,6 +395,6 @@ private:
     unsigned int initial_tick_ = 0;
     const double hz_ = 2000.0;
 
-    const double mpc_freq = 100.0;
-    const double mpc_N  = 200.0;
+    const double mpc_freq = 20.0;
+    const double mpc_N  = 20.0;
 };

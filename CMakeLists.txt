@@ -10,12 +10,17 @@ tocabi_msgs
 eigen_conversions
 )
 
+find_package(casadi REQUIRED)   # KW add (FOR CASADI)
+
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS tocabi_lib tocabi_msgs
   # DEPENDS system_lib
 )
+
+set(LIBRARY_DIRS /usr/local/lib)  # KW add (FOR CASADI)
+set(CASADI_INCLUDE_DIR /usr/local/include/casadi) # KW add (FOR CASADI)
 
 ###########
 ## Build ##
@@ -34,6 +39,7 @@ add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EX
 
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
+  ${LIBRARY_DIRS}/libcasadi.so  # KW add (FOR CASADI)
 )
 
 install(TARGETS ${PROJECT_NAME}
