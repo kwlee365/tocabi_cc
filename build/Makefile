@@ -92,8 +92,8 @@ list_install_components/fast: list_install_components
 
 # Special rule for the target edit_cache
 edit_cache:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "No interactive CMake dialog available..."
-	/usr/bin/cmake -E echo No\ interactive\ CMake\ dialog\ available.
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake cache editor..."
+	/usr/bin/ccmake -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
 .PHONY : edit_cache
 
 # Special rule for the target edit_cache
@@ -649,6 +649,33 @@ src/cc.cpp.s:
 	$(MAKE) -f CMakeFiles/tocabi_cc.dir/build.make CMakeFiles/tocabi_cc.dir/src/cc.cpp.s
 .PHONY : src/cc.cpp.s
 
+src/mpc.o: src/mpc.cpp.o
+
+.PHONY : src/mpc.o
+
+# target to build an object file
+src/mpc.cpp.o:
+	$(MAKE) -f CMakeFiles/tocabi_cc.dir/build.make CMakeFiles/tocabi_cc.dir/src/mpc.cpp.o
+.PHONY : src/mpc.cpp.o
+
+src/mpc.i: src/mpc.cpp.i
+
+.PHONY : src/mpc.i
+
+# target to preprocess a source file
+src/mpc.cpp.i:
+	$(MAKE) -f CMakeFiles/tocabi_cc.dir/build.make CMakeFiles/tocabi_cc.dir/src/mpc.cpp.i
+.PHONY : src/mpc.cpp.i
+
+src/mpc.s: src/mpc.cpp.s
+
+.PHONY : src/mpc.s
+
+# target to generate assembly for a file
+src/mpc.cpp.s:
+	$(MAKE) -f CMakeFiles/tocabi_cc.dir/build.make CMakeFiles/tocabi_cc.dir/src/mpc.cpp.s
+.PHONY : src/mpc.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -700,6 +727,9 @@ help:
 	@echo "... src/cc.o"
 	@echo "... src/cc.i"
 	@echo "... src/cc.s"
+	@echo "... src/mpc.o"
+	@echo "... src/mpc.i"
+	@echo "... src/mpc.s"
 .PHONY : help
 
 

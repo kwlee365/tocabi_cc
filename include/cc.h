@@ -68,6 +68,7 @@ public:
     bool walking_enable_;
     bool is_mode_6_init = true;
     bool is_mode_7_init = true;
+    bool is_mode_7_fin = true;
     bool is_joystick_mode = false;
     bool is_support_foot_change = false;    
     bool is_lfoot_support = false;
@@ -77,13 +78,10 @@ public:
     bool is_dsp2 = false;
     bool is_preview_ctrl_init = true;
     bool is_mpc_ctrl_init = true;
-    bool is_mpc_x_update = false;
-    bool is_mpc_y_update = false;
+    bool is_mpc_update = false;
 
     std::atomic<bool> atb_grav_update_{false};
     std::atomic<bool> atb_mpc_update_{false};
-    std::atomic<bool> atb_mpc_x_update_{false};
-    std::atomic<bool> atb_mpc_y_update_{false};
 
     // BIPED WALKING PARAMETER
     void walkingParameterSetting();
@@ -111,7 +109,7 @@ public:
     double t_ssp_;
     double t_dsp2_;
 
-    int current_step_num_, current_step_container, current_step_thread3, current_step_checker;
+    int current_step_num_, current_step_num_container, current_step_num_thread3, current_step_num_checker;
     int total_step_num_;
 
     int pattern_poly_order = 1;
@@ -133,6 +131,9 @@ public:
 
     void getComTrajectory(); 
     void getComTrajectory_mpc();
+    void getContactIndicatorReference(const int &mpc_local_time, const int &mpc_start_time, const int &mpc_local_l_or_r, const int &mpc_local_step_num_, const int &mpc_iter);
+    void getContactPointReference(const int &mpc_local_time, const int &mpc_start_time, const int &mpc_local_l_or_r, const int &mpc_local_step_num_, const Eigen::Vector3d &mpc_lfoot_support_init_, const Eigen::Vector3d &mpc_rfoot_support_init_, const double &mpc_step_length_x_temp, const double &mpc_step_length_y_temp, const int &mpc_iter);
+
     void previewcontroller(double dt, int NL, int tick, 
                            Eigen::Vector3d &x_k, Eigen::Vector3d &y_k, double &UX, double &UY,
                            const Eigen::MatrixXd &Gi, const Eigen::VectorXd &Gd, const Eigen::MatrixXd &Gx, 
@@ -251,19 +252,17 @@ public:
     Eigen::VectorXd dcm_y_ref_container;
     Eigen::VectorXd dcm_y_ref_thread3; 
 
-    Eigen::VectorXd com_x_ref;
-    Eigen::VectorXd com_x_ref_container;
-    Eigen::VectorXd com_x_ref_thread3; 
-    Eigen::VectorXd com_y_ref;
-    Eigen::VectorXd com_y_ref_container;
-    Eigen::VectorXd com_y_ref_thread3; 
+    Eigen::MatrixXd com_ref;
+    Eigen::MatrixXd com_ref_container;
+    Eigen::MatrixXd com_ref_thread3; 
 
-    Eigen::VectorXd com_dot_x_ref;
-    Eigen::VectorXd com_dot_x_ref_container;
-    Eigen::VectorXd com_dot_x_ref_thread3; 
-    Eigen::VectorXd com_dot_y_ref;
-    Eigen::VectorXd com_dot_y_ref_container;
-    Eigen::VectorXd com_dot_y_ref_thread3; 
+    Eigen::MatrixXd com_dot_ref;
+    Eigen::MatrixXd com_dot_ref_container;
+    Eigen::MatrixXd com_dot_ref_thread3; 
+
+    Eigen::MatrixXd body_euler_ref;
+    Eigen::MatrixXd body_euler_ref_container;
+    Eigen::MatrixXd body_euler_ref_thread3; 
 
     Eigen::VectorXd zx_ref;
     Eigen::VectorXd zy_ref;
@@ -276,6 +275,30 @@ public:
     Eigen::VectorXd zy_preview_container;
     Eigen::VectorXd zy_preview_thread3;
 
+    Eigen::VectorXd eta_l_ref;
+    Eigen::VectorXd eta_l_ref_container;
+    Eigen::VectorXd eta_l_ref_thread3;
+
+    Eigen::VectorXd eta_r_ref;
+    Eigen::VectorXd eta_r_ref_container;
+    Eigen::VectorXd eta_r_ref_thread3;
+
+    Eigen::MatrixXd lfoot_contact_point_ref;
+    Eigen::MatrixXd lfoot_contact_point_ref_container;
+    Eigen::MatrixXd lfoot_contact_point_ref_thread3;
+
+    Eigen::MatrixXd rfoot_contact_point_ref;
+    Eigen::MatrixXd rfoot_contact_point_ref_container;
+    Eigen::MatrixXd rfoot_contact_point_ref_thread3;
+
+    Eigen::MatrixXd lfoot_contact_wrench_ref;
+    Eigen::MatrixXd lfoot_contact_wrench_ref_container;
+    Eigen::MatrixXd lfoot_contact_wrench_ref_thread3;
+
+    Eigen::MatrixXd rfoot_contact_wrench_ref;
+    Eigen::MatrixXd rfoot_contact_wrench_ref_container;
+    Eigen::MatrixXd rfoot_contact_wrench_ref_thread3;
+    
     int first_current_step_flag_ = 0;
     int first_current_step_number_ = 0;
 
@@ -376,12 +399,75 @@ public:
     Eigen::Vector6d rfoot_contact_wrench;
     Eigen::Vector6d lfoot_contact_wrench;
 
+    Eigen::Vector6d rfoot_contact_wrench_mpc;
+    Eigen::Vector6d lfoot_contact_wrench_mpc;
+    Eigen::Vector6d rfoot_contact_wrench_container;
+    Eigen::Vector6d lfoot_contact_wrench_container;
+    Eigen::Vector6d rfoot_contact_wrench_thread3;
+    Eigen::Vector6d lfoot_contact_wrench_thread3;
+
     double kp_cp = 0.0;
     double zmp_offset = 0.0;
 
     int pred_footstep_num = 0;
     
-    void centroidalParameterCalculator();
+    template <typename EigenType>
+    void recordData(const int &file_number, const EigenType &data_);
+    void initFile();
+
+    constexpr static int NUM_PLOT{50};
+	ofstream plot_files_[NUM_PLOT];
+	const string string_plot_files_names_[NUM_PLOT]
+	{"/home/kwan/catkin_ws/src/tocabi_cc/data/data1",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data2",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data3",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data4",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data5",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data6",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data7",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data8",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data9",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data10",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data11",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data12",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data13",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data14",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data15",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data16",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data17",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data18",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data19",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data20",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data21",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data22",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data23",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data24",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data25",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data26",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data27",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data28",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data29",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data30",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data31",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data32",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data33",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data34",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data35",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data36",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data37",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data38",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data39",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data40",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data41",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data42",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data43",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data44",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data45",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data46",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data47",
+     "/home/kwan/catkin_ws/src/tocabi_cc/data/data48",
+    };
+
 private:
     Eigen::VectorQd ControlVal_;
     unsigned int walking_tick = 0;
@@ -395,6 +481,6 @@ private:
     unsigned int initial_tick_ = 0;
     const double hz_ = 2000.0;
 
-    const double mpc_freq = 20.0;
-    const double mpc_N  = 20.0;
+    const double mpc_freq = 50.0;
+    const double mpc_N  = 10.0;
 };

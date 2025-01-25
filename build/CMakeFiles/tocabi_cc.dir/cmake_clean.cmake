@@ -1,5 +1,6 @@
 file(REMOVE_RECURSE
   "CMakeFiles/tocabi_cc.dir/src/cc.cpp.o"
+  "CMakeFiles/tocabi_cc.dir/src/mpc.cpp.o"
   "devel/lib/libtocabi_cc.pdb"
   "devel/lib/libtocabi_cc.so"
 )

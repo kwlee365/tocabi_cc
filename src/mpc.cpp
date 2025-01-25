@@ -1,228 +1,404 @@
 #include "mpc.h"
 
+ofstream dataMPC("/home/kwan/catkin_ws/src/tocabi_cc/data/dataMPC.txt");
+
 using namespace casadi;
 
-MPC::MPC(RobotData &rd, double initMpcFreq, double initN) : rd_(rd), mpc_freq(initMpcFreq), N(initN)
+MPC::MPC(RobotData &rd, double initMpcFreq, double initN) : rd_(rd), mpc_freq(initMpcFreq), mpc_N(initN)
 {
-    std::cout << "MPC FREQ: " << mpc_freq << "Hz" << std::endl;
-    std::cout << "MPC HORIZON: " << N / mpc_freq << "s" << std::endl;
-    std::cout << "MPC CLASS IS SUCCESSFULLY CONSTRUCTED" << std::endl;
+    std::cout << "CURRENT PATH: " << current_path << std::endl;
+    std::cout << "LIBRARY PATH: " << library_path << std::endl;
+    std::cout << "LIBRARY NAME: " << library_name << std::endl;
+    std::cout << "LIBRARY: "      << library_path + library_name << std::endl;
+
+    casadiFunctionCall();
+}
+int MPC::returnStateDim() {return state_length;}
+
+int MPC::returnInputDim() {return input_length;}
+
+void MPC::casadiFunctionCall()
+{
+    std::string lib_full_name = library_path + library_name;
+
+    J_v_func          = casadi::external("J_v_func", lib_full_name);
+    J_vv_func         = casadi::external("J_vv_func", lib_full_name);
+
+    ceq1_func   = casadi::external("ceq1_func", lib_full_name);
+    ceq1_v_func = casadi::external("ceq1_v_func", lib_full_name);
+
+    cineq1_max_func   = casadi::external("cineq1_max_func", lib_full_name);
+    cineq1_min_func   = casadi::external("cineq1_min_func", lib_full_name);
+    cineq2_max_func   = casadi::external("cineq2_max_func", lib_full_name);
+    cineq2_min_func   = casadi::external("cineq2_min_func", lib_full_name);
+    cineq3_max_func   = casadi::external("cineq3_max_func", lib_full_name);
+    cineq3_min_func   = casadi::external("cineq3_min_func", lib_full_name);
+    cineq4_max_func   = casadi::external("cineq4_max_func", lib_full_name);
+    cineq4_min_func   = casadi::external("cineq4_min_func", lib_full_name);
+    cineq5_max_func   = casadi::external("cineq5_max_func", lib_full_name);
+    cineq5_min_func   = casadi::external("cineq5_min_func", lib_full_name);
+    cineq1_max_v_func = casadi::external("cineq1_max_v_func", lib_full_name);
+    cineq1_min_v_func = casadi::external("cineq1_min_v_func", lib_full_name);
+    cineq2_max_v_func = casadi::external("cineq2_max_v_func", lib_full_name);
+    cineq2_min_v_func = casadi::external("cineq2_min_v_func", lib_full_name);
+    cineq3_max_v_func = casadi::external("cineq3_max_v_func", lib_full_name);
+    cineq3_min_v_func = casadi::external("cineq3_min_v_func", lib_full_name);
+    cineq4_max_v_func = casadi::external("cineq4_max_v_func", lib_full_name);
+    cineq4_min_v_func = casadi::external("cineq4_min_v_func", lib_full_name);
+    cineq5_max_v_func = casadi::external("cineq5_max_v_func", lib_full_name);
+    cineq5_min_v_func = casadi::external("cineq5_min_v_func", lib_full_name);
+
+    std::cout << "CASADI FUNCTION CALL SUCCESS!" << std::endl;
 }
 
-void MPC::parameterSRBD()
+void MPC::getRobotStateFromCC(const double &mass_cc, const Eigen::Matrix3d &inertia_cc, const Eigen::Vector3d &body_ori_cc, const Eigen::Vector3d &com_pos_cc, const Eigen::Vector3d &body_angvel_cc, const Eigen::Vector3d &com_linvel_cc)
 {
-    if(is_param_init_ == true)
+    mass_ = mass_cc;
+    grav_ = GRAVITY;
+    EigenToCasadiDM<Eigen::MatrixXd>(inertia_, inertia_cc, inertia_cc.rows(), inertia_cc.cols());
+
+    f_z_max = 1.2 * mass_ * grav_;
+    f_z_min = 0.0;
+    mu = 0.7;
+
+    footX = 0.30;
+    footY = 0.18;
+
+    dT_mpc = 1.0 / mpc_freq;
+
+    Eigen::VectorXd x0_cc; x0_cc.setZero(state_length);
+    // x0_cc.segment(0, 3) = body_ori_cc;
+    x0_cc.segment(3, 3) = com_pos_cc;
+    // x0_cc.segment(6, 3) = body_angvel_cc;
+    x0_cc.segment(9, 3) = com_linvel_cc;
+    EigenToCasadiDM<Eigen::VectorXd>(x0, x0_cc, x0_cc.size(), 1);
+    
+    v_mpc_.setZero(total_num_mpc_state);
+    X_mpc_.setZero(state_length * mpc_N); EigenToCasadiDM<Eigen::VectorXd>(X, X_mpc_, X_mpc_.size(), 1);
+    U_mpc_.setZero(input_length * mpc_N); EigenToCasadiDM<Eigen::VectorXd>(U, U_mpc_, U_mpc_.size(), 1);
+}
+
+void MPC::setReferenceValue(const Eigen::MatrixXd &com_ref_cc, const Eigen::MatrixXd &com_dot_ref_cc, const Eigen::MatrixXd &body_euler_ref_cc, 
+                            const Eigen::VectorXd &eta_l_ref_cc, const Eigen::VectorXd &eta_r_ref_cc, 
+                            const Eigen::MatrixXd &lfoot_contact_point_ref_cc, const Eigen::MatrixXd &rfoot_contact_point_ref_cc,
+                            const Eigen::MatrixXd &lfoot_contact_wrench_ref_cc, const Eigen::MatrixXd &rfoot_contact_wrench_ref_cc)
+{
+    Eigen::VectorXd X_ref_cc; X_ref_cc.setZero(state_length * mpc_N);
+    for (int i = 0; i < mpc_N; i++)
     {
-        mass_ = rd_.link_[COM_id].mass;
-        inertia_ = rd_.link_[COM_id].inertia;   // global
-
-        is_param_init_ = false;
+        X_ref_cc.segment(state_length * i + 0, 3) = Eigen::Vector3d::Zero();   
+        X_ref_cc.segment(state_length * i + 3, 3) = com_ref_cc.col(i);
+        X_ref_cc.segment(state_length * i + 6, 3) = Eigen::Vector3d::Zero();
+        X_ref_cc.segment(state_length * i + 9, 3) = com_dot_ref_cc.col(i);
     }
+    EigenToCasadiDM<Eigen::VectorXd>(X_ref, X_ref_cc, X_ref_cc.size(), 1);
+
+    Eigen::VectorXd U_ref_cc; U_ref_cc.setZero(input_length * mpc_N);
+    for (int i = 0; i < mpc_N; i++)
+    {
+        U_ref_cc.segment(input_length * i + 0, 6) = lfoot_contact_wrench_ref_cc.col(i);   
+        U_ref_cc.segment(input_length * i + 6, 6) = rfoot_contact_wrench_ref_cc.col(i);
+    }
+    EigenToCasadiDM<Eigen::VectorXd>(U_ref, U_ref_cc, U_ref_cc.size(), 1);
+
+    EigenToCasadiDM<Eigen::MatrixXd>(com_ref_horizon, com_ref_cc, com_ref_cc.rows(), com_ref_cc.cols());
+    EigenToCasadiDM<Eigen::MatrixXd>(com_dot_ref_horizon, com_dot_ref_cc, com_dot_ref_cc.rows(), com_dot_ref_cc.cols());
+    EigenToCasadiDM<Eigen::MatrixXd>(body_euler_ref_horizon, body_euler_ref_cc, body_euler_ref_cc.rows(), body_euler_ref_cc.cols());
+
+    EigenToCasadiDM<Eigen::VectorXd>(etaL_ref_horizon, eta_l_ref_cc, eta_l_ref_cc.size(), 1); 
+    EigenToCasadiDM<Eigen::VectorXd>(etaR_ref_horizon, eta_r_ref_cc, eta_r_ref_cc.size(), 1);
+    EigenToCasadiDM<Eigen::MatrixXd>(rL_ref_horizon, lfoot_contact_point_ref_cc - com_ref_cc, lfoot_contact_point_ref_cc.rows(), lfoot_contact_point_ref_cc.cols());
+    EigenToCasadiDM<Eigen::MatrixXd>(rR_ref_horizon, rfoot_contact_point_ref_cc - com_ref_cc, rfoot_contact_point_ref_cc.rows(), rfoot_contact_point_ref_cc.cols());
 }
 
-void MPC::modelSRBD()
+void MPC::setWeightMatrix(const Eigen::VectorXd &W_Q_cc, const Eigen::VectorXd &W_R_cc)
 {
+    EigenToCasadiDM<Eigen::VectorXd>(W_Q, W_Q_cc, W_Q_cc.size(), 1);
+    EigenToCasadiDM<Eigen::VectorXd>(W_R, W_R_cc, W_R_cc.size(), 1);
+}
+
+void MPC::computeMPCGradientsHessian()
+{
+    std::vector<casadi::DM> H_dm = J_vv_func(std::vector<casadi::DM>{X, U, X_ref, U_ref, W_Q, W_R});
+    std::vector<casadi::DM> g_dm = J_v_func( std::vector<casadi::DM>{X, U, X_ref, U_ref, W_Q, W_R});
     
-    parameterSRBD();
+    std::vector<casadi::DM> ceq1_dm   =   ceq1_func(std::vector<casadi::DM>{x0, X, U, mass_, grav_, inertia_, dT_mpc, rL_ref_horizon, rR_ref_horizon, body_euler_ref_horizon, etaL_ref_horizon, etaR_ref_horizon});
+    std::vector<casadi::DM> ceq1_v_dm = ceq1_v_func(std::vector<casadi::DM>{x0, X, U, mass_, grav_, inertia_, dT_mpc, rL_ref_horizon, rR_ref_horizon, body_euler_ref_horizon, etaL_ref_horizon, etaR_ref_horizon});
 
-    // SYSTEM PARAMETER
-    SX m = SX::sym("m");    
-    SX g = SX::sym("g");    
-    SX I = SX::sym("I", 3, 3);  
-    SX mu = SX::sym("mu");  // friction coefficient
+    // std::cout << "x0: " << x0 << std::endl;
+    // std::cout << "X: " << X << std::endl;
+    // std::cout << "U: " << U << std::endl;
+    // std::cout << "mass: " << mass_ << std::endl;
+    // std::cout << "grav: " << grav_ << std::endl;
+    // std::cout << "inertia_: " << inertia_ << std::endl;
+    // std::cout << "dT_mpc: " << dT_mpc << std::endl;
+    // std::cout << "rL_ref_horizon: " << rL_ref_horizon << std::endl;
+    // std::cout << "rR_ref_horizon: " << rR_ref_horizon << std::endl;
+    // std::cout << "body_euler_ref_horizon: " << body_euler_ref_horizon << std::endl;
+    // std::cout << "etaL_ref_horizon: " << etaL_ref_horizon << std::endl;
+    // std::cout << "etaR_ref_horizon: " << etaR_ref_horizon << std::endl;
 
-    SX dT = SX::sym("dT");
+    std::vector<casadi::DM> cineq1_max_dm = cineq1_max_func(std::vector<casadi::DM>{U, f_z_max});   
+    std::vector<casadi::DM> cineq1_min_dm = cineq1_min_func(std::vector<casadi::DM>{U, f_z_min});  
+    std::vector<casadi::DM> cineq2_max_dm = cineq2_max_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq2_min_dm = cineq2_min_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq3_max_dm = cineq3_max_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq3_min_dm = cineq3_min_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq4_max_dm = cineq4_max_func(std::vector<casadi::DM>{U, footY / 2.0});
+    std::vector<casadi::DM> cineq4_min_dm = cineq4_min_func(std::vector<casadi::DM>{U, footY / 2.0});
+    std::vector<casadi::DM> cineq5_max_dm = cineq5_max_func(std::vector<casadi::DM>{U, footX / 2.0});
+    std::vector<casadi::DM> cineq5_min_dm = cineq5_min_func(std::vector<casadi::DM>{U, footX / 2.0});
 
-    SX p_lf_ref_horizon = SX::sym("p_lf_ref_horizon", 3, N);      // position vector from COM to Stance foot
-    SX p_rf_ref_horizon = SX::sym("p_rf_ref_horizon", 3, N);      // position vector from COM to Stance foot
-    
-    SX theta_ref_horizon = SX::sym("r", 3, N); 
-    SX p_c_ref_horizon = SX::sym("r", 3, N); 
-    SX w_ref_horizon = SX::sym("r", 3, N); 
-    SX p_c_dot_ref_horizon = SX::sym("r", 3, N); 
-
-    // STATE VARIABLE
-    SX X = SX::sym("X", state_length * N);    
-    SX X_ref = SX::sym("X_ref", state_length * N);    
-    SX U = SX::sym("U", input_length * N);
-    // SX U_ref = SX::sym("U_ref", input_length * N);    
-    SX U_ref = SX::zeros(input_length * N);
-    SX v = vertcat(X, U);
-
-    SX x = SX::sym("x", state_length);  // current robot state
+    std::vector<casadi::DM> cineq1_max_v_dm = cineq1_max_v_func(std::vector<casadi::DM>{U, f_z_max});
+    std::vector<casadi::DM> cineq1_min_v_dm = cineq1_min_v_func(std::vector<casadi::DM>{U, f_z_min});
+    std::vector<casadi::DM> cineq2_max_v_dm = cineq2_max_v_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq2_min_v_dm = cineq2_min_v_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq3_max_v_dm = cineq3_max_v_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq3_min_v_dm = cineq3_min_v_func(std::vector<casadi::DM>{U, mu});
+    std::vector<casadi::DM> cineq4_max_v_dm = cineq4_max_v_func(std::vector<casadi::DM>{U, footY / 2.0});
+    std::vector<casadi::DM> cineq4_min_v_dm = cineq4_min_v_func(std::vector<casadi::DM>{U, footY / 2.0});
+    std::vector<casadi::DM> cineq5_max_v_dm = cineq5_max_v_func(std::vector<casadi::DM>{U, footX / 2.0});
+    std::vector<casadi::DM> cineq5_min_v_dm = cineq5_min_v_func(std::vector<casadi::DM>{U, footX / 2.0});
 
     // COST FUNCTION
-    SX W_Q = SX::sym("W_Q", N * state_length);  // Trajectory Tracking
-    SX W_R = SX::sym("W_R", N * input_length);  // Regulation
-    SX J = mtimes(transpose(X - X_ref), mtimes(diag(W_Q), X - X_ref)) + mtimes(transpose(U - U_ref), mtimes(diag(W_R), U - U_ref));
-    SX J_v = jacobian(J, v);
-    SX J_vv = hessian(J, v);
+    H_ = CasadiDMVectorToEigen<Eigen::MatrixXd>(H_dm);
+    g_ = CasadiDMVectorToEigen<Eigen::VectorXd>(g_dm);
 
-    // STATE SPACE EQUATION
-    std::vector<SX> A_k;
-    std::vector<SX> B_k;
-    std::vector<SX> d_k;
+    // EQUALITY CONSTRAINTS 
+    Eigen::MatrixXd Aeq1   = CasadiDMVectorToEigen<Eigen::MatrixXd>(ceq1_v_dm);
+    Eigen::VectorXd lbAeq1 = (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(ceq1_dm);
+    Eigen::VectorXd ubAeq1 = (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(ceq1_dm);
 
-    // EQUALITY CONSTRAINT (SRBD)
-    SX ceq1;
-    SX x_k = x;
-    for(int i = 0; i < N; i++)
-    {
-        SX ceq1_sub = SX::zeros(12, 1);
-
-        SX x_k_next = SX::zeros(12, 1); // x_(k+1) = A_k * x_k + B_k * u_k
-        SX u_k = SX::zeros(12, 1);  // u_k
-
-        u_k = U(Slice(state_length * i + 0, state_length * i + 12));
-
-        SX p_lf = p_lf_ref_horizon(Slice(), i);
-        SX p_rf = p_rf_ref_horizon(Slice(), i);
-
-        SX theta   = theta_ref_horizon(Slice(), i); // Build system matrix using the reference values.
-        SX p_c     = p_c_ref_horizon(Slice(), i);
-        SX w       = w_ref_horizon(Slice(), i);
-        SX p_c_dot = p_c_dot_ref_horizon(Slice(), i);
-
-        SX T = SX::zeros(3, 3);
-        SX roll = theta(0); SX pitch= theta(1); SX yaw  = theta(2);
-
-        T(0, 0) = cos(pitch) * cos(yaw);
-        T(0, 1) = -sin(yaw);
-        T(0, 2) = 0.0;
-        T(1, 0) = cos(pitch) * sin(yaw);
-        T(1, 1) = cos(yaw);
-        T(1, 2) = 0.0;
-        T(2, 0) = -sin(pitch);
-        T(2, 1) = 0.0;
-        T(2, 2) = 1.0; 
-
-        SX T_inv = SX::inv(T);
-
-        // CONTINUOUS SYSTEM
-        SX A = SX::zeros(state_length, state_length);
-        SX B = SX::zeros(state_length, input_length);
-        SX d = SX::zeros(state_length, 1);
-
-        A(Slice(0, 3), Slice(6, 9))  = T_inv;  
-        A(Slice(3, 6), Slice(9,12)) = SX::eye(3);
-
-        B(Slice(6, 9), Slice(0, 3)) = I;
-        B(Slice(6, 9), Slice(3, 6)) = I * skew(p_lf);
-        B(Slice(6, 9), Slice(6, 9)) = I;
-        B(Slice(6, 9), Slice(9,12)) = I * skew(p_rf);
-
-        B(Slice(9,12), Slice(3, 6)) = SX::eye(3) / m;
-        B(Slice(9,12), Slice(9,12)) = SX::eye(3) / m;
-
-        d(11) = -g;
+    // INEQUALITY CONSTRAINTS 
+    // UNILATERAL CONTACT CONDITION
+    Eigen::MatrixXd A1   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq1_max_v_dm);
+    Eigen::VectorXd lbA1 = (+1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(cineq1_min_dm);
+    Eigen::VectorXd ubA1 = (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(cineq1_max_dm);
     
-        // DISCRETE SYSTEM
-        SX Ad = SX::zeros(state_length, state_length);
-        SX Bd = SX::zeros(state_length, input_length);
-        SX dd = SX::zeros(state_length, 1);
+    // NO SLIP CONDITION (HORIZONTAL FORCE, X)
+    Eigen::MatrixXd A2_max   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq2_max_v_dm);
+    Eigen::MatrixXd A2_min   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq2_min_v_dm);
 
-        Ad = (SX::eye(12) + A * dT);
-        Bd = B * dT;
-        dd = d * dT;
+    // NO SLIP CONDITION (HORIZONTAL FORCE, Y)
+    Eigen::MatrixXd A3_max   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq3_max_v_dm);
+    Eigen::MatrixXd A3_min   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq3_min_v_dm);
 
-        x_k_next = Ad * x_k + Bd * u_k + dd;
+    // NO TIPPING CONDITION (HORIZONTAL MOMENT, X)
+    Eigen::MatrixXd A4_max   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq4_max_v_dm);
+    Eigen::MatrixXd A4_min   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq4_min_v_dm);
 
-        ceq1_sub = X(Slice(state_length * i + 0, state_length * i + 12)) - x_k_next;
+    // NO TIPPING CONDITION (HORIZONTAL MOMENT, Y)
+    Eigen::MatrixXd A5_max   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq5_max_v_dm);
+    Eigen::MatrixXd A5_min   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq5_min_v_dm);
 
-        ceq1 = vertcat(ceq1, ceq1_sub);
+    int ceq1_dim   = Aeq1.rows();
+    int cineq1_dim = A1.rows();
+    int cineq2_max_dim = A2_max.rows(); int cineq2_min_dim = A2_min.rows();
+    int cineq3_max_dim = A3_max.rows(); int cineq3_min_dim = A3_min.rows();
+    int cineq4_max_dim = A4_max.rows(); int cineq4_min_dim = A4_min.rows();
+    int cineq5_max_dim = A5_max.rows(); int cineq5_min_dim = A5_min.rows();
 
-        x_k = x_k_next;
-    }
+    total_num_mpc_state = (state_length + input_length) * mpc_N;
+    total_num_constraint = ceq1_dim + cineq1_dim + cineq2_max_dim + cineq2_min_dim 
+                                                 + cineq3_max_dim + cineq3_min_dim
+                                                 + cineq4_max_dim + cineq4_min_dim
+                                                 + cineq5_max_dim + cineq5_min_dim;
 
-    casadi::SX ceq1_v = jacobian(ceq1, v);
+    int stack_cnt = 0;
+    A_.setZero(total_num_constraint, total_num_mpc_state);
+    lbA_.setZero(total_num_constraint);
+    ubA_.setZero(total_num_constraint);
 
-    // FRICTION CONE CONSTRAINTS
-    SX cineq1;
-    SX foot_X;
-    SX foot_Y;
-    for(int i = 0; i < N; i++)
-    {
-        SX cineq1_max_mL_sub = SX::zeros(2, 1);
-        SX cineq1_min_mL_sub = SX::zeros(2, 1);
-        SX cineq1_max_fL_sub = SX::zeros(2, 1);
-        SX cineq1_min_fL_sub = SX::zeros(2, 1);
+    A_.block(stack_cnt, 0,  ceq1_dim, total_num_mpc_state) = Aeq1;  
+    lbA_.segment(stack_cnt, ceq1_dim) = lbAeq1;
+    ubA_.segment(stack_cnt, ceq1_dim) = ubAeq1;
+    stack_cnt += ceq1_dim;
 
-        SX cineq1_max_mR_sub = SX::zeros(2, 1);
-        SX cineq1_min_mR_sub = SX::zeros(2, 1);
-        SX cineq1_max_fR_sub = SX::zeros(2, 1);
-        SX cineq1_min_fR_sub = SX::zeros(2, 1);
+    A_.block(stack_cnt, 0,  cineq1_dim, total_num_mpc_state) = A1;  
+    lbA_.segment(stack_cnt, cineq1_dim) = lbA1;
+    ubA_.segment(stack_cnt, cineq1_dim) = ubA1;
+    stack_cnt += cineq1_dim;
 
-        SX mL = SX::zeros(3, 1);
-        SX fL = SX::zeros(3, 1);
-        SX mR = SX::zeros(3, 1);
-        SX fR = SX::zeros(3, 1);
+    A_.block(stack_cnt, 0,  cineq2_max_dim, total_num_mpc_state) = A2_max;  
+    lbA_.segment(stack_cnt, cineq2_max_dim).setConstant(-std::numeric_limits<double>::infinity());;
+    ubA_.segment(stack_cnt, cineq2_max_dim).setZero();
+    stack_cnt += cineq2_max_dim;
+   
+    A_.block(stack_cnt, 0, cineq2_min_dim, total_num_mpc_state) = A2_min;
+    lbA_.segment(stack_cnt, cineq2_min_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq2_min_dim).setZero();
+    stack_cnt += cineq2_min_dim;
 
-        mL = U(Slice(state_length * i + 0, state_length * i + 3));
-        fL = U(Slice(state_length * i + 3, state_length * i + 6));
-        mR = U(Slice(state_length * i + 6, state_length * i + 9));
-        fR = U(Slice(state_length * i + 9, state_length * i +12));
+    A_.block(stack_cnt, 0, cineq3_max_dim, total_num_mpc_state) = A3_max;
+    lbA_.segment(stack_cnt, cineq3_max_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq3_max_dim).setZero();
+    stack_cnt += cineq3_max_dim;
 
-        cineq1_max_mL_sub(0) = mL(0) - foot_Y * fL(2);    // tau_x <= Y * fz
-        cineq1_max_mL_sub(1) = mL(1) - foot_X * fL(2);    // tau_y <= X * fz
-        cineq1_min_mL_sub(0) =-mL(0) + foot_Y * fL(2);    //-tau_x <= Y * fz
-        cineq1_min_mL_sub(1) =-mL(1) + foot_X * fL(2);    //-tau_y <= X * fz
-        cineq1_max_fL_sub(0) = fL(0) - mu * fL(2);        // fx <= mu * fz
-        cineq1_max_fL_sub(1) = fL(1) - mu * fL(2);        // fy <= mu * fz
-        cineq1_min_fL_sub(0) =-fL(0) + mu * fL(2) ;       //-fx <= mu * fz
-        cineq1_min_fL_sub(1) =-fL(1) + mu * fL(2) ;       //-fy <= mu * fz
+    A_.block(stack_cnt, 0, cineq3_min_dim, total_num_mpc_state) = A3_min;
+    lbA_.segment(stack_cnt, cineq3_min_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq3_min_dim).setZero();
+    stack_cnt += cineq3_min_dim;
 
-        cineq1_max_mR_sub(0) = mR(0) - foot_Y * fR(2);    // tau_x <= Y * fz
-        cineq1_max_mR_sub(1) = mR(1) - foot_X * fR(2);    // tau_y <= X * fz
-        cineq1_min_mR_sub(0) =-mR(0) + foot_Y * fR(2);    //-tau_x <= Y * fz
-        cineq1_min_mR_sub(1) =-mR(1) + foot_X * fR(2);    //-tau_y <= X * fz
-        cineq1_max_fR_sub(0) = fR(0) - mu * fR(2);        // fx <= mu * fz
-        cineq1_max_fR_sub(1) = fR(1) - mu * fR(2);        // fy <= mu * fz
-        cineq1_min_fR_sub(0) =-fR(0) + mu * fR(2) ;       //-fx <= mu * fz
-        cineq1_min_fR_sub(1) =-fR(1) + mu * fR(2) ;       //-fy <= mu * fz
+    A_.block(stack_cnt, 0, cineq4_max_dim, total_num_mpc_state) = A4_max;
+    lbA_.segment(stack_cnt, cineq4_max_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq4_max_dim).setZero();
+    stack_cnt += cineq4_max_dim;
 
-        cineq1 = vertcat(cineq1, cineq1_max_mL_sub, cineq1_min_mL_sub);
-        cineq1 = vertcat(cineq1, cineq1_max_fL_sub, cineq1_min_fL_sub);
-        cineq1 = vertcat(cineq1, cineq1_max_mR_sub, cineq1_min_mR_sub);
-        cineq1 = vertcat(cineq1, cineq1_max_fR_sub, cineq1_min_fR_sub);
-    }
+    A_.block(stack_cnt, 0, cineq4_min_dim, total_num_mpc_state) = A4_min;
+    lbA_.segment(stack_cnt, cineq4_min_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq4_min_dim).setZero();
+    stack_cnt += cineq4_min_dim;
 
-    casadi::SX cineq1_v = jacobian(cineq1, v);
+    A_.block(stack_cnt, 0, cineq5_max_dim, total_num_mpc_state) = A5_max;
+    lbA_.segment(stack_cnt, cineq5_max_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq5_max_dim).setZero();
+    stack_cnt += cineq5_max_dim;
 
-    // BIG M CONSTRAINTS
-    SX cineq2;
-    SX eta_lf = SX::sym("eta_lf", 12);  // eta = 1 if foot is on swing.
-                                        // eta = 0 else (support)
-    SX eta_rf = SX::sym("eta_rf", 12);
-    SX bigM = SX::sym("bigM");
+    A_.block(stack_cnt, 0, cineq5_min_dim, total_num_mpc_state) = A5_min;
+    lbA_.segment(stack_cnt, cineq5_min_dim).setConstant(-std::numeric_limits<double>::infinity());
+    ubA_.segment(stack_cnt, cineq5_min_dim).setZero();
+    stack_cnt += cineq5_min_dim;
 
-    for (int i = 0; i < N; i++)
-    {
-        SX cineq2_max_uL_sub = SX::zeros(3, 1);
-        SX cineq2_min_uL_sub = SX::zeros(3, 1);
-
-        SX cineq2_max_uR_sub = SX::zeros(3, 1);
-        SX cineq2_min_uR_sub = SX::zeros(3, 1);
-
-        SX uL = SX::zeros(6, 1);
-        SX uR = SX::zeros(6, 1);
-
-        uL = U(Slice(state_length * i + 0, state_length * i + 6));
-        uR = U(Slice(state_length * i + 6, state_length * i + 12));
-
-        cineq2_max_uL_sub = uL - bigM * (1 - eta_lf(i));
-        cineq2_min_uL_sub =-uL - bigM * (1 - eta_lf(i));
-
-        cineq2_max_uR_sub = uR - bigM * (1 - eta_rf(i));
-        cineq2_min_uR_sub =-uR - bigM * (1 - eta_rf(i));
-
-        cineq2 = vercat(cineq2, cineq2_max_uL_sub, cineq2_min_uL_sub);
-        cineq2 = vercat(cineq2, cineq2_max_uR_sub, cineq2_min_uR_sub);
-    }
-
-    /*
-    // TODO : MAX_MIN 나누어서 제약 조건 다시 작성.
-    // TODO : A 구성시에 ETA 반영?
-    // TODO : cc랑 연동
-    */
+    checkGradHessSize();
 }
 
+void MPC::checkGradHessSize()
+{
+    if(is_gradhess_init_ == true)
+    {
+        std::cout << "================================================" << std::endl;
+        std::cout << "===== SRBD-MPC COST & CONSTRAINTS DIM INFO =====" << std::endl;
+        std::cout << "================================================" << std::endl;
+
+        std::cout << "H_: " << H_.rows() << " x " << H_.cols() << std::endl;
+        std::cout << "g_ size: " << g_.size() << std::endl;
+        std::cout << std::endl;
+
+        std::cout << "A: " << A_.rows() << " x " << A_.cols() << std::endl;
+        std::cout << "lbA size: " << lbA_.size() << std::endl;
+        std::cout << "ubA size: " << ubA_.size() << std::endl;
+        std::cout << std::endl;
+  
+        dataMPC << "H_: " << H_ << std::endl;
+        dataMPC << "g_: " << g_.transpose() << std::endl;
+        dataMPC << std::endl;
+
+        dataMPC << "A: " << A_ << std::endl;
+        dataMPC << "lbA: " << lbA_.transpose() << std::endl;
+        dataMPC << "ubA: " << ubA_.transpose() << std::endl;
+        dataMPC << std::endl;
+
+        is_gradhess_init_ = false;
+    }
+}
+
+
+void MPC::solveContactWrenchMPC()
+{
+    computeMPCGradientsHessian();
+
+    if(is_mpc_init_ == true)
+    {
+        QP_LMPC_SRBD_.InitializeProblemSize(total_num_mpc_state, total_num_constraint);
+
+        v_mpc_.setZero(total_num_mpc_state);
+
+        std::cout << "SRBD MPC CLASS IS SUCCESSFULLY INITIALIZED" << std::endl;
+        std::cout << "OPTIMIZATION VARIABLES NUMBER: " << total_num_mpc_state << std::endl;
+        std::cout << "OPTIMIZATION CONSTRAINTS NUMBER: " << total_num_constraint << std::endl;
+        std::cout << "MPC FREQ: " << mpc_freq << "Hz" << std::endl;
+        std::cout << "MPC HORIZON: " << mpc_N / mpc_freq << "s" << std::endl;
+        is_mpc_init_ = false;
+    }
+
+    QP_LMPC_SRBD_.EnableEqualityCondition(1e-8);
+    QP_LMPC_SRBD_.EnableMaxCpuTime(dT_mpc);
+    QP_LMPC_SRBD_.UpdateMinProblem(H_, g_);
+    QP_LMPC_SRBD_.DeleteSubjectToAx();
+    QP_LMPC_SRBD_.UpdateSubjectToAx(A_, lbA_, ubA_);
+
+    Eigen::VectorXd v_temp_; v_temp_.setZero(total_num_mpc_state);
+    if(QP_LMPC_SRBD_.SolveQPoases(200, v_temp_, true))
+    {
+        v_mpc_ = v_temp_.segment(0, total_num_mpc_state);
+        X_mpc_ = v_mpc_.segment(0                   , state_length * mpc_N);
+        U_mpc_ = v_mpc_.segment(state_length * mpc_N, input_length * mpc_N);
+    }
+    else
+    {
+        std::cout << "SRBD MPC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
+        v_mpc_.setZero(total_num_mpc_state);
+        X_mpc_.setZero(state_length * mpc_N);
+        U_mpc_.setZero(input_length * mpc_N);
+    }
+}
+
+Eigen::VectorXd MPC::returnMPCControlInput() const
+{
+    return U_mpc_.segment(0, input_length);
+}
+
+Eigen::MatrixXd MPC::returnPredictedState() const
+{
+    Eigen::MatrixXd state_pred_from_mpc; state_pred_from_mpc.setZero(state_length, mpc_N);
+    for (int i = 0; i < mpc_N; i++)
+    {
+        state_pred_from_mpc.block(0, i, state_length, 1) = X_mpc_.segment(state_length * i, state_length);
+    }
+
+    return state_pred_from_mpc;
+}
+
+Eigen::MatrixXd MPC::returnPredictedContactWrench() const
+{
+    Eigen::MatrixXd contact_wrench_pred_horizon; contact_wrench_pred_horizon.setZero(input_length, mpc_N);
+
+    for (int i = 0; i < mpc_N; i++)
+    {
+        contact_wrench_pred_horizon.block(0, i, input_length, 1) = U_mpc_.segment(input_length * i, input_length);
+    }
+
+    return contact_wrench_pred_horizon;
+}
+
+
+template <typename EigenType>
+void MPC::EigenToCasadiDM(casadi::DM &casadi_dm, const EigenType &eigen_data, int rows, int cols)
+{
+    casadi_dm = casadi::DM::zeros(rows, cols);
+    memcpy(casadi_dm.ptr(), eigen_data.data(), sizeof(double) * rows * cols);
+}
+
+template <typename ReturnType>
+ReturnType MPC::CasadiDMVectorToEigen(const std::vector<casadi::DM> &casadi_dm_vector)
+{
+    casadi::DM Matrx = casadi_dm_vector.at(0);
+    casadi::Sparsity SpA = Matrx.get_sparsity();
+
+    std::vector<casadi_int> output_row, output_col;
+    SpA.get_triplet(output_row, output_col);
+    std::vector<double> values = Matrx.get_nonzeros();
+
+    using T = Eigen::Triplet<double>;
+    std::vector<T> TripletList;
+    TripletList.resize(values.size());
+    for(int k = 0; k < values.size(); ++k)
+        TripletList[k] = T(output_row[k], output_col[k], values[k]);
+
+    Eigen::SparseMatrix<double> SpMatrx(Matrx.size1(), Matrx.size2());
+    SpMatrx.setFromTriplets(TripletList.begin(), TripletList.end());
+
+    if constexpr (std::is_same<ReturnType, Eigen::MatrixXd>::value) 
+    {
+        return Eigen::MatrixXd(SpMatrx);
+    } 
+    else if constexpr (std::is_same<ReturnType, Eigen::VectorXd>::value) 
+    {
+        Eigen::MatrixXd temp_mat = Eigen::MatrixXd(SpMatrx);
+        return Eigen::VectorXd(Eigen::Map<Eigen::VectorXd>(temp_mat.data(), temp_mat.cols() * temp_mat.rows()));
+    } 
+    else 
+    {
+        static_assert("Unsupported ReturnType. Use Eigen::MatrixXd or Eigen::VectorXd.");
+    }
+}
