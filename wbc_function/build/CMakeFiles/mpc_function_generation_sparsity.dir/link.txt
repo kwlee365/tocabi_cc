@@ -1,1 +1,0 @@
-/usr/bin/g++  -Wall -Wextra -pthread -O3   -Wl,-rpath -Wl,/home/kwan/catkin_ws/src/tocabi_cc/mpc_function/build CMakeFiles/mpc_function_generation_sparsity.dir/src/mpc_function_generation_sparsity.cpp.o  -o mpc_function_generation_sparsity  -Wl,-rpath,/usr/local/lib /usr/local/lib/libcasadi.so 

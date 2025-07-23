@@ -62,8 +62,5 @@ file(GLOB HEADER_FILES_H ${CMAKE_SOURCE_DIR}/include/*.h)
 
 
 # add executable files for test
-add_executable(mpc_function_generation src/mpc_function_generation.cpp)
-target_link_libraries(mpc_function_generation ${CASADI_LIBRARIES})
-
-add_executable(mpc_function_generation_sparsity src/mpc_function_generation_sparsity.cpp)
-target_link_libraries(mpc_function_generation_sparsity ${CASADI_LIBRARIES})
+add_executable(wbc_function_generation src/wbc_function_generation.cpp)
+target_link_libraries(wbc_function_generation ${CASADI_LIBRARIES})

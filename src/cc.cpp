@@ -2,7 +2,7 @@
 
 using namespace TOCABI;
 
-CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_VIRTUAL)
+CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_VIRTUAL), dyn_wbc_(MODEL_DOF_VIRTUAL)
 {
     nh_cc_.setCallbackQueue(&queue_cc_);
     ControlVal_.setZero();
@@ -12,6 +12,9 @@ CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_
     ros::param::get("/tocabi_controller/urdf_path", desc_package_path);
 
     RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_, true, false);
+
+    // joy_sub_ = nh_cc_.subscribe<sensor_msgs::Joy>("/joy", 10, &CustomController::joyCallback, this);
+    xbox_joy_sub_ = nh_cc_.subscribe<sensor_msgs::Joy>("/joy", 10, &CustomController::xBoxJoyCallback, this);
 }
 
 Eigen::VectorQd CustomController::getControl()
@@ -49,18 +52,22 @@ void CustomController::computeSlow()
         if(is_mode_7_init == true)
         {
             saveInitialState();
-            // when calculating the nullspace projector, 
-            // contact jacobian is considered; thus, 
-            // do not include the support foot jacobian into the 
 
-            task_hierarchy= {
-// /* Hierachy 0: */    { {"COM_id", TaskType::Position} },
-/* Hierachy 1: */    { {"Pelvis_Link", TaskType::Position}, {"Pelvis_Link", TaskType::Orientation} },
-// /* Hierachy 2: */    { {"L_Foot_Link", TaskType::Position}, {"L_Foot_Link", TaskType::Orientation}, {"R_Foot_Link", TaskType::Position}, {"R_Foot_Link", TaskType::Orientation} }    
-/* Hierachy 3: */    { {"Upperbody_Link", TaskType::Orientation} },
-/* Hierachy 4: */    { {"Head_Link", TaskType::Orientation} },
-/* Hierachy 5: */    { {"L_Wrist2_Link", TaskType::Position}, {"L_Wrist2_Link", TaskType::Orientation}, {"R_Wrist2_Link", TaskType::Position}, {"R_Wrist2_Link", TaskType::Orientation} }
-            };
+            dyn_wbc_.setRobotSystemParameters(0.7,                 // Friction Coefficient
+                                              0.3,                 // Foot size
+                                              0.26,                // Foot width
+                                              2,                   // Contact Dim
+                                              rd_.torque_limit,    // Torque limit
+                                              joint_pos_limit_l_,
+                                              joint_pos_limit_h_,
+                                              1500.0,              // Max vertical contact force
+                                              0.0);                // Min vertical contact force
+
+            Eigen::VectorVQd W_Q;      W_Q      = 1000.0 * Eigen::VectorVQd::Ones();
+            Eigen::VectorQd  W_torque; W_torque = 1.0 * Eigen::VectorQd::Ones();
+            Eigen::Vector12d W_lambda; W_lambda = 1.0 * Eigen::Vector12d::Ones();
+            Eigen::VectorQd  W_torque_prev; W_torque_prev = 1000.0 * Eigen::VectorQd::Ones();
+            dyn_wbc_.setWbcWeights(W_Q, W_torque, W_lambda, W_torque_prev);
 
             cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
             cout << "TIME: "<< rd_.control_time_ << endl; 
@@ -68,115 +75,38 @@ void CustomController::computeSlow()
             is_mode_7_init = false;
         }
 
-        std::map<std::string, Eigen::Matrix3d> R_desired;
-        std::map<std::string, Eigen::Vector3d> x_desired, dx_desired, ddx_desired, v_desired, dv_desired;
-
-        for (const auto& [name, idx] : link_index_map)
-        {
-            x_desired[name]   = init_base_ee_pos[name];
-            dx_desired[name]  = Eigen::Vector3d::Zero();
-            ddx_desired[name] = Eigen::Vector3d::Zero();
-
-            R_desired[name]   = init_base_ee_rot[name];
-            v_desired[name]   = Eigen::Vector3d::Zero();
-            dv_desired[name]  = Eigen::Vector3d::Zero();
-
-            rd_.q_desired = q_init_des;
-        }
-
-        // Test
-        static int tick = 0;
-        x_desired["Pelvis_Link"](1) = DyrosMath::cubic(tick, 0, 8000, 
-                                                         init_base_ee_pos["Pelvis_Link"](1), 
-                                                         init_base_ee_pos["Pelvis_Link"](1) - 0.2, 
-                                                         0.0, 0.0);
-
-        dx_desired["Pelvis_Link"](1) = DyrosMath::cubicDot(tick, 0, 8000, 
-                                                           init_base_ee_pos["Pelvis_Link"](1), 
-                                                           init_base_ee_pos["Pelvis_Link"](1) - 0.2, 
-                                                           0.0, 0.0);
-
-        ddx_desired["Pelvis_Link"](1) = DyrosMath::cubicDdot(tick, 0, 8000, 
-                                                             init_base_ee_pos["Pelvis_Link"](1), 
-                                                             init_base_ee_pos["Pelvis_Link"](1) - 0.2, 
-                                                             0.0, 0.0);
-
-        // x_desired["L_Wrist2_Link"](2) = DyrosMath::cubic(tick, 0, 8000, 
-        //                                                  init_base_ee_pos["L_Wrist2_Link"](2), 
-        //                                                  init_base_ee_pos["L_Wrist2_Link"](2) + 0.2, 
-        //                                                  0.0, 0.0);
-
-        // dx_desired["L_Wrist2_Link"](2) = DyrosMath::cubicDot(tick, 0, 8000, 
-        //                                                      init_base_ee_pos["L_Wrist2_Link"](2), 
-        //                                                      init_base_ee_pos["L_Wrist2_Link"](2) + 0.2, 
-        //                                                      0.0, 0.0);
-
-        // ddx_desired["L_Wrist2_Link"](2) = DyrosMath::cubicDdot(tick, 0, 8000, 
-        //                                                        init_base_ee_pos["L_Wrist2_Link"](2), 
-        //                                                        init_base_ee_pos["L_Wrist2_Link"](2) + 0.2, 
-        //                                                        0.0, 0.0);
-
-        // x_desired["R_Wrist2_Link"](2) = DyrosMath::cubic(tick, 0, 8000, 
-        //                                                  init_base_ee_pos["R_Wrist2_Link"](2), 
-        //                                                  init_base_ee_pos["R_Wrist2_Link"](2) - 0.2, 
-        //                                                  0.0, 0.0);
-
-        // dx_desired["R_Wrist2_Link"](2) = DyrosMath::cubicDot(tick, 0, 8000, 
-        //                                                      init_base_ee_pos["R_Wrist2_Link"](2), 
-        //                                                      init_base_ee_pos["R_Wrist2_Link"](2) - 0.2, 
-        //                                                      0.0, 0.0);
-
-        // ddx_desired["R_Wrist2_Link"](2) = DyrosMath::cubicDdot(tick, 0, 8000, 
-        //                                                        init_base_ee_pos["R_Wrist2_Link"](2), 
-        //                                                        init_base_ee_pos["R_Wrist2_Link"](2) - 0.2, 
-        //                                                        0.0, 0.0);
-
-
-        tick++;
+        motion_mode_ = TestMotionType::PelvHand;
+        runTestMotion(2.0, 0.1, 0.2);
 
         static Eigen::VectorXd dq_des, qdot_des, qddot_des;
         kin_wbc_.computeKinematicWBC(task_hierarchy,
                                      x_desired, dx_desired, ddx_desired,
-                                     R_desired, v_desired, dv_desired,
+                                     R_desired, w_desired, dw_desired,
+                                     task_Kp, task_Kv, 
                                      base_ee_pos, base_ee_rot,
+                                     base_ee_v, base_ee_w,
                                      base_Jac_v, base_Jac_w,
+                                     base_Jacdot_v, base_Jacdot_w,
                                      base_contact_Jac,
-                                     M_,
+                                     M_inv_, rd_.q_dot_virtual_,
                                      dq_des, qdot_des, qddot_des);
 
-        if (is_mode_temp_init == true)
-        {
-            // std::cout << "base_ee_pos[L_Foot_Link]: " << base_ee_pos["L_Foot_Link"].transpose() << std::endl;
-            // std::cout << "base_ee_rot[L_Foot_Link]:\n" << base_ee_rot["L_Foot_Link"] << std::endl;
-            // std::cout << "x_desired[L_Foot_Link]: " << x_desired["L_Foot_Link"].transpose() << std::endl;
-            // std::cout << "R_desired[L_Foot_Link]:\n" << R_desired["L_Foot_Link"] << std::endl;
-            // std::cout << "ee[L_Foot_Link]:\n" << kin_wbc_.orientationError(base_ee_rot["L_Foot_Link"], R_desired["L_Foot_Link"])  << std::endl;
-
-            // std::cout << "base_Jac_v[L_Foot_Link]: " << base_Jac_v["L_Foot_Link"] << std::endl;
-            // std::cout << "base_Jac_w[L_Foot_Link]:\n" << base_Jac_w["L_Foot_Link"] << std::endl;
-
-            // std::cout << "base_ee_pos[R_Foot_Link]: " << base_ee_pos["R_Foot_Link"].transpose() << std::endl;
-            // std::cout << "base_ee_rot[R_Foot_Link]:\n" << base_ee_rot["R_Foot_Link"] << std::endl;
-            // std::cout << "x_desired[R_Foot_Link]: " << x_desired["R_Foot_Link"].transpose() << std::endl;
-            // std::cout << "R_desired[R_Foot_Link]:\n" << R_desired["R_Foot_Link"] << std::endl;
-
-            // std::cout << "base_Jac_v[R_Foot_Link]: " << base_Jac_v["R_Foot_Link"] << std::endl;
-            // std::cout << "base_Jac_w[R_Foot_Link]:\n" << base_Jac_w["R_Foot_Link"] << std::endl;
-            // std::cout << "ee[R_Foot_Link]:\n" << kin_wbc_.orientationError(base_ee_rot["R_Foot_Link"], R_desired["R_Foot_Link"])  << std::endl;
-            is_mode_temp_init = false;
-        }
-
-
-        rd_.q_desired += dq_des.tail(MODEL_DOF);
+        rd_.q_desired += qdot_des.tail(MODEL_DOF) / hz_;
 
         Eigen::VectorQd torque_unbound; torque_unbound.setZero();
+        
+        //--- Dynamic
+        dyn_wbc_.getRobotStates(M_, G_, base_contact_Jac, qddot_des, rd_.q_, rd_.q_dot_);
+        torque_unbound = dyn_wbc_.computeDynamicWBC(); 
+        // torque_unbound = dyn_wbc_.computeDynamicWBC() + Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_); 
+        // torque_unbound = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_); 
+        
+
+        //--- Final Torque Command
         Eigen::VectorQd torque_bound;   torque_bound.setZero();
-        torque_unbound = (Kp_diag * (rd_.q_desired - rd_.q_)) - (Kd_diag * rd_.q_dot_);
         for (int i = 0; i < MODEL_DOF; i++) {
             torque_bound(i) = DyrosMath::minmax_cut(torque_unbound(i), -rd_.torque_limit(i), rd_.torque_limit(i));
         }
-
-        //--- Final Torque Command
         rd_.torque_desired = torque_bound;
     }
 }
@@ -260,6 +190,23 @@ void CustomController::loadParams()
         joint_vel_limit_l_(i) = vel_low[i];
         joint_vel_limit_h_(i) = vel_high[i];
     }
+
+    // Task Gain
+    task_Kp[base_link_name]  = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[chest_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[head_link_name]  = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[lfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[rfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[lhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[rhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+
+    task_Kv[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[chest_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[head_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
 }
 
 void CustomController::moveInitialPose()
@@ -302,6 +249,8 @@ void CustomController::stateManager()
     contact_Jac.setZero(12, MODEL_DOF_VIRTUAL);
     base_contact_Jac.setZero(12, MODEL_DOF_VIRTUAL);
 
+
+
     for (const auto& [name, idx] : link_index_map)
     {
         //--- Global frame
@@ -311,28 +260,44 @@ void CustomController::stateManager()
         ee_rot[name] = rd_.link_[idx].rotm;
         ee_v[name] = rd_.link_[idx].v;
         ee_w[name] = rd_.link_[idx].w;
-        contact_Jac.block(0, 0, 3, MODEL_DOF_VIRTUAL) = Jac_v["L_Foot_Link"]; 
-        contact_Jac.block(3, 0, 3, MODEL_DOF_VIRTUAL) = Jac_w["L_Foot_Link"]; 
-        contact_Jac.block(6, 0, 3, MODEL_DOF_VIRTUAL) = Jac_v["R_Foot_Link"]; 
-        contact_Jac.block(9, 0, 3, MODEL_DOF_VIRTUAL) = Jac_w["R_Foot_Link"]; 
+        contact_Jac.block(0, 0, 3, MODEL_DOF_VIRTUAL) = Jac_v[lfoot_link_name]; 
+        contact_Jac.block(3, 0, 3, MODEL_DOF_VIRTUAL) = Jac_w[lfoot_link_name]; 
+        contact_Jac.block(6, 0, 3, MODEL_DOF_VIRTUAL) = Jac_v[rfoot_link_name]; 
+        contact_Jac.block(9, 0, 3, MODEL_DOF_VIRTUAL) = Jac_w[rfoot_link_name]; 
 
         //--- Base frame
+        base_Jac_v_pre[name] = base_Jac_v[name]; 
+        base_Jac_w_pre[name] = base_Jac_w[name]; 
+
         base_Jac_v[name]  = base_rot.transpose() * Jac_v[name];
         base_Jac_w[name]  = base_rot.transpose() * Jac_w[name];
+
+        if(is_derivative_init == true)
+        {
+            base_Jac_v_pre[name] = base_Jac_v[name];
+            base_Jac_w_pre[name] = base_Jac_w[name];
+            
+            is_derivative_init = false;
+        }
+        
+        base_Jacdot_v[name]  = (base_Jac_v[name] - base_Jac_v_pre[name]) * hz_;
+        base_Jacdot_w[name]  = (base_Jac_w[name] - base_Jac_w_pre[name]) * hz_; 
+
         base_ee_pos[name] = base_rot.transpose() * (ee_pos[name] - base_pos);
         base_ee_rot[name] = base_rot.transpose() *  ee_rot[name];                             
         base_ee_v[name]   = base_rot.transpose() *  ee_v[name];                               
         base_ee_w[name]   = base_rot.transpose() *  ee_w[name]; 
-        base_contact_Jac.block(0, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_v["L_Foot_Link"]; 
-        base_contact_Jac.block(3, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_w["L_Foot_Link"]; 
-        base_contact_Jac.block(6, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_v["R_Foot_Link"]; 
-        base_contact_Jac.block(9, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_w["R_Foot_Link"];
+        base_contact_Jac.block(0, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_v[lfoot_link_name]; 
+        base_contact_Jac.block(3, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_w[lfoot_link_name]; 
+        base_contact_Jac.block(6, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_v[rfoot_link_name]; 
+        base_contact_Jac.block(9, 0, 3, MODEL_DOF_VIRTUAL) = base_Jac_w[rfoot_link_name];
+
     }
 
     Eigen::VectorQVQd base_q_virtual_;
-    base_q_virtual_.segment(0,3) = base_ee_pos["Pelvis_Link"];
+    base_q_virtual_.segment(0,3) = base_ee_pos[base_link_name];
     
-    Quaterniond base_quat(base_ee_rot["Pelvis_Link"]);
+    Quaterniond base_quat(base_ee_rot[base_link_name]);
     base_quat.normalize();
     
     base_q_virtual_(3)  = base_quat.x();
@@ -343,19 +308,245 @@ void CustomController::stateManager()
     base_q_virtual_.segment(6, MODEL_DOF) = rd_.q_;
 
     //--- Dynamics
-    M_.setZero(); G_.setZero();
+    M_.setZero(); G_.setZero(); M_inv_.setZero();
     M_temp_.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL); G_temp_.setZero(MODEL_DOF_VIRTUAL);
 
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, base_q_virtual_, M_temp_, false);
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, base_q_virtual_, M_temp_, true);
     M_ = M_temp_;
+    M_inv_ = M_.inverse();
     RigidBodyDynamics::NonlinearEffects(model_, base_q_virtual_, Eigen::VectorXd::Zero(MODEL_DOF_QVIRTUAL), G_temp_);
     G_ = G_temp_;
 }
 
 void CustomController::saveInitialState()
 {
+    init_ee_pos = ee_pos;
+    init_ee_rot = ee_rot;
+    init_ee_v = ee_v;
+    init_ee_w = ee_w;
+
     init_base_ee_pos = base_ee_pos;
     init_base_ee_rot = base_ee_rot;
     init_base_ee_v = base_ee_v;
     init_base_ee_w = base_ee_w;
+
+
+    rd_.q_desired = q_init_des;
+
+    for (const auto& [name, idx] : link_index_map)
+    {
+        x_desired[name]   = init_base_ee_pos[name];
+        dx_desired[name]  = Eigen::Vector3d::Zero();
+        ddx_desired[name] = Eigen::Vector3d::Zero();
+
+        R_desired[name]   = init_base_ee_rot[name];
+        w_desired[name]   = Eigen::Vector3d::Zero();
+        dw_desired[name]  = Eigen::Vector3d::Zero();
+    }
+}
+
+void CustomController::runTestMotion(double traj_time, double pelv_dist, double hand_dist)
+{
+    switch (motion_mode_)
+    {
+        case TestMotionType::Pelv:
+            movePelvPose(traj_time, pelv_dist);
+            break;
+        case TestMotionType::Hand:
+            moveHandPose(traj_time, hand_dist);
+            break;
+        case TestMotionType::PelvHand:
+            movePelvHandPose(traj_time, pelv_dist, hand_dist);
+            break;
+        case TestMotionType::PelvJoy:
+            movePelvPoseJoy(target_vel_x_, target_vel_y_, target_vel_yaw_);
+        case TestMotionType::None:
+        default:
+            break;
+    }
+}
+
+void CustomController::movePelvPose(double traj_time, double pelv_dist)
+{
+    task_hierarchy= {
+        { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+    };
+
+    static int tick = 0;
+
+    x_desired[base_link_name] = init_ee_pos[base_link_name];
+    dx_desired[base_link_name].setZero();
+    ddx_desired[base_link_name].setZero();
+    x_desired[base_link_name](1) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                        init_ee_pos[base_link_name](1), 
+                                                        init_ee_pos[base_link_name](1) + pelv_dist, 
+                                                        0.0, 0.0);
+
+    dx_desired[base_link_name](1) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                        init_ee_pos[base_link_name](1), 
+                                                        init_ee_pos[base_link_name](1) + pelv_dist, 
+                                                        0.0, 0.0);
+
+    ddx_desired[base_link_name](1) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                            init_ee_pos[base_link_name](1), 
+                                                            init_ee_pos[base_link_name](1) + pelv_dist, 
+                                                            0.0, 0.0);
+
+    x_desired[base_link_name]   = ee_rot[base_link_name].transpose() * (x_desired[base_link_name] - ee_pos[base_link_name]);
+    dx_desired[base_link_name]  = ee_rot[base_link_name].transpose() * (dx_desired[base_link_name]);
+    ddx_desired[base_link_name] = ee_rot[base_link_name].transpose() * (ddx_desired[base_link_name]);
+    
+    tick++;
+}
+
+void CustomController::moveHandPose(double traj_time,  double hand_dist)
+{
+    task_hierarchy= {
+            { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+            { {chest_link_name, TaskType::Orientation} },
+            { {head_link_name, TaskType::Orientation} },
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+    };
+
+    static int tick = 0;
+
+    //--- Hand Test
+    x_desired[lhand_link_name](2) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                        init_base_ee_pos[lhand_link_name](2), 
+                                                        init_base_ee_pos[lhand_link_name](2) + hand_dist, 
+                                                        0.0, 0.0);
+
+    dx_desired[lhand_link_name](2) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                            init_base_ee_pos[lhand_link_name](2), 
+                                                            init_base_ee_pos[lhand_link_name](2) + hand_dist, 
+                                                            0.0, 0.0);
+
+    ddx_desired[lhand_link_name](2) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                            init_base_ee_pos[lhand_link_name](2), 
+                                                            init_base_ee_pos[lhand_link_name](2) + hand_dist, 
+                                                            0.0, 0.0);
+
+    x_desired[rhand_link_name](2) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                        init_base_ee_pos[rhand_link_name](2), 
+                                                        init_base_ee_pos[rhand_link_name](2) - hand_dist, 
+                                                        0.0, 0.0);
+
+    dx_desired[rhand_link_name](2) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                            init_base_ee_pos[rhand_link_name](2), 
+                                                            init_base_ee_pos[rhand_link_name](2) - hand_dist, 
+                                                            0.0, 0.0);
+
+    ddx_desired[rhand_link_name](2) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                            init_base_ee_pos[rhand_link_name](2), 
+                                                            init_base_ee_pos[rhand_link_name](2) - hand_dist, 
+                                                            0.0, 0.0);
+    
+    tick++;
+}
+
+void CustomController::movePelvHandPose(double traj_time, double pelv_dist, double hand_dist)
+{
+    task_hierarchy= {
+            { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+            { {chest_link_name, TaskType::Orientation} },
+            { {head_link_name, TaskType::Orientation} },
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+    };
+
+    static int tick = 0;
+
+    //--- Pevis Test
+    x_desired[base_link_name]   = init_ee_pos[base_link_name];
+    dx_desired[base_link_name].setZero();
+    ddx_desired[base_link_name].setZero();
+    x_desired[base_link_name](1) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                   init_ee_pos[base_link_name](1), 
+                                                   init_ee_pos[base_link_name](1) + pelv_dist, 
+                                                   0.0, 0.0);
+
+    dx_desired[base_link_name](1) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                       init_ee_pos[base_link_name](1), 
+                                                       init_ee_pos[base_link_name](1) + pelv_dist, 
+                                                       0.0, 0.0);
+
+    ddx_desired[base_link_name](1) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                         init_ee_pos[base_link_name](1), 
+                                                         init_ee_pos[base_link_name](1) + pelv_dist, 
+                                                         0.0, 0.0);
+
+    x_desired[base_link_name]   = ee_rot[base_link_name].transpose() * (x_desired[base_link_name] - ee_pos[base_link_name]);
+    dx_desired[base_link_name]  = ee_rot[base_link_name].transpose() * (dx_desired[base_link_name]);
+    ddx_desired[base_link_name] = ee_rot[base_link_name].transpose() * (ddx_desired[base_link_name]);
+
+    //--- Hand Test
+
+    x_desired[lhand_link_name](2) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                     init_base_ee_pos[lhand_link_name](2), 
+                                                     init_base_ee_pos[lhand_link_name](2) + hand_dist, 
+                                                     0.0, 0.0);
+
+    dx_desired[lhand_link_name](2) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                         init_base_ee_pos[lhand_link_name](2), 
+                                                         init_base_ee_pos[lhand_link_name](2) + hand_dist, 
+                                                         0.0, 0.0);
+
+    ddx_desired[lhand_link_name](2) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                           init_base_ee_pos[lhand_link_name](2), 
+                                                           init_base_ee_pos[lhand_link_name](2) + hand_dist, 
+                                                           0.0, 0.0);
+
+    x_desired[rhand_link_name](2) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                     init_base_ee_pos[rhand_link_name](2), 
+                                                     init_base_ee_pos[rhand_link_name](2) - hand_dist, 
+                                                     0.0, 0.0);
+
+    dx_desired[rhand_link_name](2) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                         init_base_ee_pos[rhand_link_name](2), 
+                                                         init_base_ee_pos[rhand_link_name](2) - hand_dist, 
+                                                         0.0, 0.0);
+
+    ddx_desired[rhand_link_name](2) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                           init_base_ee_pos[rhand_link_name](2), 
+                                                           init_base_ee_pos[rhand_link_name](2) - hand_dist, 
+                                                           0.0, 0.0);
+
+                                                           tick++;
+}
+
+void CustomController::movePelvPoseJoy(const double& vx, const double& vy, const double& wz)
+{
+    task_hierarchy= {
+        { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+    };
+
+    //--- Translation
+    x_desired[base_link_name](0) = vx / hz_;
+    x_desired[base_link_name](1) = vy / hz_;
+
+    dx_desired[base_link_name](0) = vx;
+    dx_desired[base_link_name](1) = vy;
+
+    //--- Orientation
+    w_desired[base_link_name](2) = wz;
+
+    Eigen::Vector3d eulerDot_desired = AngvelToEulerRates(w_desired[base_link_name], DyrosMath::rot2Euler(base_ee_rot[base_link_name]));
+    Eigen::Vector3d euler_desired = eulerDot_desired / hz_;
+    R_desired[base_link_name] = DyrosMath::Euler2rot(euler_desired(0), euler_desired(1), euler_desired(2));
+}
+
+//--- Joy Utils
+void CustomController::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
+{
+    target_vel_x_ = DyrosMath::minmax_cut(joy->axes[0]*0.5, -0.5, 0.5);
+    target_vel_y_ = 0.0; // DyrosMath::minmax_cut(joy->axes[1], -0.0, 0.0);
+    target_vel_yaw_ = -DyrosMath::minmax_cut(joy->axes[2]*0.3, -0.3, 0.3);
+}
+
+void CustomController::xBoxJoyCallback(const sensor_msgs::Joy::ConstPtr& joy)
+{
+    double vel_threshold = 0.1;
+
+    target_vel_x_   = DyrosMath::minmax_cut(joy->axes[1] * vel_threshold, -vel_threshold, vel_threshold);
+    target_vel_y_   = DyrosMath::minmax_cut(joy->axes[0] * vel_threshold, -vel_threshold, vel_threshold);
+    target_vel_yaw_ = DyrosMath::minmax_cut(joy->axes[3] * vel_threshold, -vel_threshold, vel_threshold);
 }
