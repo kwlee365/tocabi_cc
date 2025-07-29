@@ -2,56 +2,65 @@ clc
 clear all
 close all
 
-% THREAD1 DATA
-dataWBC = readmatrix('dataWBC.txt');
-
+dataWBC = readmatrix('dataWBC1.txt');
+qddot_des = dataWBC(:, 1:39);
+dataWBC = readmatrix('dataWBC2.txt');
+qddot_act = dataWBC(:, 1:39);
+dataWBC = readmatrix('dataWBC3.txt');
 torque = dataWBC(:, 1:33);
-wrench = dataWBC(:, 34:45);
+dataWBC = readmatrix('dataWBC4.txt');
+wrench = dataWBC(:, 1:12);
+% TORQUE
 
-%% TORQUE
 figure()
+start_cnt = 0;
 for cnt = 1:1:6
     subplot(6,1,cnt)
-    plot(torque(:,cnt));
+    plot(qddot_des(:,start_cnt + cnt + 6));
     hold on
-    grid on
+    plot(qddot_act(:,start_cnt + cnt + 6));
+    hold on
+    plot(torque(:,start_cnt + cnt));
+    legend('qddot des', 'qddot act', 'torque')
 end
+
 figure()
-for cnt = 1:1:6
-    subplot(6,1,cnt)
-    plot(torque(:,cnt+6));
+start_cnt = 0;
+for cnt = 1:1:12
+    plot(wrench(:,start_cnt + cnt));
+    hold on
+    legend()
 end
+
+%
+clc
+clear all
+% close all
+
+dataCC = readmatrix('dataCC1.txt');
+v_ = dataCC(:, 1:6);
+dataCC = readmatrix('dataCC2.txt');
+w_ = dataCC(:, 1:6);
+
+
 figure()
+start_cnt = 0;
 for cnt = 1:1:3
     subplot(3,1,cnt)
-    plot(torque(:,cnt+12));
-end
-figure()
-for cnt = 1:1:8
-    subplot(8,1,cnt)
-    plot(torque(:,cnt+15));
+    plot(v_(:,start_cnt + cnt));
+    hold on
+    plot(v_(:,start_cnt + cnt + 3 ));
+
+    legend('v des', 'v mea')
 end
 
 figure()
-for cnt = 1:1:2
-    subplot(2,1,cnt)
-    plot(torque(:,cnt+23));
+start_cnt = 0;
+for cnt = 1:1:3
+    subplot(3,1,cnt)
+    plot(w_(:,start_cnt + cnt));
+    hold on
+    plot(w_(:,start_cnt + cnt + 3 ));
+
+    legend('v des', 'v mea')
 end
-figure()
-for cnt = 1:1:8
-    subplot(8,1,cnt)
-    plot(torque(:,cnt+25));
-end
-% %% CONTACT WRENCH
-% figure()
-% for cnt = 1:1:6
-%     subplot(6,1,cnt)
-%     plot(wrench(:,cnt));
-%     hold on
-%     grid on
-% end
-% figure()
-% for cnt = 1:1:6
-%     subplot(6,1,cnt)
-%     plot(wrench(:,cnt+6));
-% end

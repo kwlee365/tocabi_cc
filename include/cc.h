@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <list>
+#include <iomanip> 
 
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
@@ -19,7 +20,8 @@ enum class TestMotionType {
     Pelv,
     Hand,
     PelvHand,
-    PelvJoy
+    PelvJoy,
+    PelvHandJoy
 };
 
 class CustomController
@@ -132,6 +134,8 @@ public:
     Eigen::MatrixVVd M_;
     Eigen::MatrixVVd M_inv_;
     Eigen::VectorVQd G_;
+    std::map<std::string, Eigen::Matrix3d> base_Lambda_v;
+    std::map<std::string, Eigen::Matrix3d> base_Lambda_w;
     //---
 
     //--- Initial Values
@@ -144,17 +148,113 @@ public:
     std::map<std::string, Eigen::Vector3d> x_desired, dx_desired, ddx_desired, w_desired, dw_desired;
     std::map<std::string, Eigen::Vector3d> task_Kp; 
     std::map<std::string, Eigen::Vector3d> task_Kv; 
-    Eigen::VectorQd q_des;
-
+    Eigen::VectorVQd q_des, dq_des, qdot_des, qddot_des;
 
     //--- Test Function
     void movePelvPose(double traj_time, double pelv_dist);
     void moveHandPose(double traj_time, double hand_dist);
     void movePelvHandPose(double traj_time, double pelv_dist, double hand_dist);
     void movePelvPoseJoy(const double& vx, const double& vy, const double& wz);
+    void movePelvHandPoseJoy(const double& target_vel_x_, const double& target_vel_y_, const double& target_vel_yaw_, const double& traj_time, const double& hand_dist);
     void runTestMotion(double traj_time, double pelv_dist, double hand_dist);
     TestMotionType motion_mode_ = TestMotionType::None;
 private:
     Eigen::VectorQd ControlVal_;
     double hz_ = 2000;
+
+    const double NM2CNT[MODEL_DOF] =
+        {  
+            3.0,  //left Leg
+            4.3,
+            3.8,
+            3.46,
+            4.5,
+            6.0,
+            
+            3.0,  //right Leg
+            4.3,
+            3.8,
+            3.46,
+            4.5,
+            6.0,
+            
+            3.3,  //Waist
+            3.3,            
+            3.3,  //upperbody
+            
+            15.5, //shoulder2
+            15.5, //shoulder1
+            15.5, //shoulder2
+            15.5, //arm
+            42.0, //Elbow
+            42.0, //Forearm 
+            95.0, //wrist
+            95.0,
+            
+            95.0, //head
+            95.0,
+            
+            15.5, //shoulder2
+            15.5, //shoulder1
+            15.5, //shoulder2
+            15.5, //arm
+            42.0, //Elbow
+            42.0, //Forearm 
+            95.0, //wrist
+            95.0
+        };
+
+        // Damping values for each joint based on its speed reducer type
+        const double jointDamping[MODEL_DOF] = {
+            0.0248, // HipYaw (shg20_100_2so)
+            0.0248, // HipRoll (shg20_100_2so)
+            0.0248, // HipPitch (shg20_100_2so)
+            0.0248, // KneePitch (shg20_100_2so)
+            0.0248, // AnklePitch (shg20_100_2so)
+            0.0161, // AnkleRoll (shd20_100_2sh)
+
+            0.0417, // WaistYaw (shg25_100_2so)
+            0.0417, // WaistPitch (shg25_100_2so)
+            0.0417, // WaistRoll (shg25_100_2so)
+
+            0.0148, // Shoulder1 (shg17_100_2so)
+            0.0148, // Shoulder2 (shg17_100_2so)
+            0.0148, // Shoulder3 (shg17_100_2so)
+            0.0148, // Armlink (shg17_100_2so)
+            0.0047, // Elbow (shg14_100_2so)
+            0.0047, // ForeArm (shg14_100_2so)
+            0.0029, // Wrist1 (csf_11_100_2xh_f)
+            0.0029, // Wrist2 (csf_11_100_2xh_f)
+
+            0.0029, // Head1 (csf_11_100_2xh_f)
+            0.0029  // Head2 (csf_11_100_2xh_f)
+        };
+
+        // Friction loss values for each joint based on its speed reducer type
+        const double jointFrictionLoss[MODEL_DOF] = {
+            9.9,  // HipYaw (shg20_100_2so)
+            9.9,  // HipRoll (shg20_100_2so)
+            9.9,  // HipPitch (shg20_100_2so)
+            9.9,  // KneePitch (shg20_100_2so)
+            9.9,  // AnklePitch (shg20_100_2so)
+            22.0, // AnkleRoll (shd20_100_2sh)
+
+            14.0, // WaistYaw (shg25_100_2so)
+            14.0, // WaistPitch (shg25_100_2so)
+            14.0, // WaistRoll (shg25_100_2so)
+
+            6.5,  // Shoulder1 (shg17_100_2so)
+            6.5,  // Shoulder2 (shg17_100_2so)
+            6.5,  // Shoulder3 (shg17_100_2so)
+            6.5,  // Armlink (shg17_100_2so)
+            3.7,  // Elbow (shg14_100_2so)
+            3.7,  // ForeArm (shg14_100_2so)
+            1.5,  // Wrist1 (csf_11_100_2xh_f)
+            1.5,  // Wrist2 (csf_11_100_2xh_f)
+
+            1.5,  // Head1 (csf_11_100_2xh_f)
+            1.5   // Head2 (csf_11_100_2xh_f)
+        };
+        
+    const double gear_ratio = 100.0;
 };

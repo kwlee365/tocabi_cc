@@ -22,7 +22,7 @@ int main(){
     std::pair<int, int> dims;
 
     //--- System Parameter
-    SX H = SX::sym("H", nv, nv);
+    SX H_inv = SX::sym("H_inv", nv, nv);
     SX G = SX::sym("G", nv);
     SX J_c = SX::sym("J_c", 12, nv);
     SX J_i = SX::sym("J_i", 3, nv);
@@ -35,19 +35,23 @@ int main(){
     SX qdot = SX::sym("qdot", na);
     SX alpha1 = SX::sym("alpha1");
     SX alpha2 = SX::sym("alpha2");
+    SX alpha3 = SX::sym("alpha3");
 
     SX torque_lim  = SX::sym("torque_lim", na);
     SX q_pos_l_lim = SX::sym("q_pos_l_lim", na);
     SX q_pos_h_lim = SX::sym("q_pos_h_lim", na);
+    SX q_vel_l_lim = SX::sym("q_vel_l_lim", na);
+    SX q_vel_h_lim = SX::sym("q_vel_h_lim", na);
 
     SX qddot_des = SX::sym("qddot_des", nv);
     SX torque_prev = SX::sym("torque_prev", na);
+    SX lambda_des  = SX::sym("lambda_des", 12);
 
     SX S_T = SX::zeros(nv, na);
     for (int i = nv - na; i < nv; ++i) S_T(i, i - (nv - na)) = 1.0;
     SX A = horzcat(S_T, transpose(J_c));
     SX F = vertcat(torque, lambda);
-    SX bdot = mtimes(H, qddot_des) + G;
+    SX qddot_actual = mtimes(H_inv, mtimes(A, F) - G); // qddot = H⁻¹(AF - G)
 
 
     
@@ -59,9 +63,9 @@ int main(){
     SX W_lambda = SX::sym("W_lambda", 12);
     SX W_torque_prev = SX::sym("W_torque_prev", na);
 
-    SX J1 = mtimes(transpose(mtimes(A, F) - bdot), mtimes(diag(W_Q), (mtimes(A, F) - bdot)));
+    SX J1 = mtimes(transpose(qddot_actual - qddot_des), mtimes(diag(W_Q), (qddot_actual - qddot_des)));
     SX J2 = mtimes(transpose(torque), mtimes(diag(W_torque), torque));
-    SX J3 = mtimes(transpose(lambda), mtimes(diag(W_lambda), lambda));
+    SX J3 = mtimes(transpose(lambda - lambda_des), mtimes(diag(W_lambda), lambda - lambda_des));
     SX J4 = mtimes(transpose(torque - torque_prev), mtimes(diag(W_torque_prev), torque - torque_prev));
 
     SX J = J1 + J2 + J3 + J4;
@@ -70,16 +74,6 @@ int main(){
 
 
 
-
-
-    // //--- CONTACT CONSTRAINTS
-    SX ceq0 = mtimes(J_c, solve(H, mtimes(A, F) - G))- mtimes(J_c, qddot_des);
-    SX ceq0_v = jacobian(ceq0, F);
-
-    //--- VIRTUAL JOINTS CONSTRAINTS
-    SX ceq1_full = mtimes(H, qddot_des) + G - mtimes(transpose(J_c), lambda);
-    SX ceq1 = ceq1_full(Slice(0, 6)); 
-    SX ceq1_v = jacobian(ceq1, F);
 
 
     //--- FRICTION CONE CONSTRAINTS
@@ -175,8 +169,7 @@ int main(){
 
 
 
-    //--- JOINT POSITION BOUNDARY CONSTRAINTS
-    SX qddot_actual = solve(H, mtimes(A, F) - G); // qddot = H⁻¹(AF - G)
+    //--- JOINT POSITION BOUNDARY CONSTRAINTS   
     SX qddot_act_na = qddot_actual(Slice(nv - na, nv));  // Only actuated joints
 
     SX cineq7_max = qddot_act_na + (alpha1 + alpha2) * qdot + alpha1 * alpha2 * (q - q_pos_h_lim);
@@ -184,23 +177,21 @@ int main(){
     SX cineq7_max_v = jacobian(cineq7_max, F);
     SX cineq7_min_v = jacobian(cineq7_min, F);
 
+    SX cineq8_max = qddot_act_na + (alpha3) * (qdot - q_vel_h_lim);
+    SX cineq8_min =-qddot_act_na - (alpha3) * (qdot - q_vel_l_lim);
+    SX cineq8_max_v = jacobian(cineq8_max, F);
+    SX cineq8_min_v = jacobian(cineq8_min, F);
+
     //--- GENERATE CASADI FUNCTIONS
     Function J_v_func("J_v_func",
-        {H, G, J_c, qdot, qddot_des, torque, torque_prev, lambda, W_Q, W_torque, W_lambda, W_torque_prev},
+        {H_inv, G, J_c, qdot, qddot_des, torque, torque_prev, lambda, lambda_des, W_Q, W_torque, W_lambda, W_torque_prev},
         {J_v}
     );
 
     Function J_vv_func("J_vv_func",
-        {H, G, J_c, qdot, qddot_des, torque, torque_prev, lambda, W_Q, W_torque, W_lambda, W_torque_prev},
+        {H_inv, G, J_c, qdot, qddot_des, torque, torque_prev, lambda, lambda_des, W_Q, W_torque, W_lambda, W_torque_prev},
         {J_vv}
     );
-
-    // --- Contact constraint
-    Function ceq0_func("ceq0_func", {H, G, J_c, qddot_des, torque, lambda}, {ceq0});
-    Function ceq0_v_func("ceq0_v_func", {H, G, J_c, qddot_des, torque, lambda}, {ceq0_v});
-
-    Function ceq1_func("ceq1_func", {H, G, J_c, qddot_des, lambda}, {ceq1});
-    Function ceq1_v_func("ceq1_v_func", {H, G, J_c, qddot_des, lambda}, {ceq1_v});
 
     // --- Friction cone constraints
     Function cineq1_max_func("cineq1_max_func", {lambda, f_z_max}, {cineq1_max});
@@ -233,11 +224,15 @@ int main(){
     Function cineq6_min_v_func("cineq6_min_v_func", {torque, torque_lim}, {cineq6_min_v});
 
     // --- Joint limits
-    Function cineq7_max_func("cineq7_max_func", {H, G, J_c, torque, lambda, q, qdot, q_pos_h_lim, alpha1, alpha2}, {cineq7_max});
-    Function cineq7_min_func("cineq7_min_func", {H, G, J_c, torque, lambda, q, qdot, q_pos_l_lim, alpha1, alpha2}, {cineq7_min});
-    Function cineq7_max_v_func("cineq7_max_v_func", {H, G, J_c, torque, lambda, q, qdot, q_pos_h_lim, alpha1, alpha2}, {cineq7_max_v});
-    Function cineq7_min_v_func("cineq7_min_v_func", {H, G, J_c, torque, lambda, q, qdot, q_pos_l_lim, alpha1, alpha2}, {cineq7_min_v});
+    Function cineq7_max_func("cineq7_max_func", {H_inv, G, J_c, torque, lambda, q, qdot, q_pos_h_lim, alpha1, alpha2}, {cineq7_max});
+    Function cineq7_min_func("cineq7_min_func", {H_inv, G, J_c, torque, lambda, q, qdot, q_pos_l_lim, alpha1, alpha2}, {cineq7_min});
+    Function cineq7_max_v_func("cineq7_max_v_func", {H_inv, G, J_c, torque, lambda, q, qdot, q_pos_h_lim, alpha1, alpha2}, {cineq7_max_v});
+    Function cineq7_min_v_func("cineq7_min_v_func", {H_inv, G, J_c, torque, lambda, q, qdot, q_pos_l_lim, alpha1, alpha2}, {cineq7_min_v});
 
+    Function cineq8_max_func("cineq8_max_func", {H_inv, G, J_c, torque, lambda, qdot, q_vel_h_lim, alpha3}, {cineq8_max});
+    Function cineq8_min_func("cineq8_min_func", {H_inv, G, J_c, torque, lambda, qdot, q_vel_l_lim, alpha3}, {cineq8_min});
+    Function cineq8_max_v_func("cineq8_max_v_func", {H_inv, G, J_c, torque, lambda, qdot, q_vel_h_lim, alpha3}, {cineq8_max_v});
+    Function cineq8_min_v_func("cineq8_min_v_func", {H_inv, G, J_c, torque, lambda, qdot, q_vel_l_lim, alpha3}, {cineq8_min_v});
     /////////////////////////
     // Function Generation //
     std::cout << "CASADI FUNCTION GENERATION START!!!" << std::endl;
@@ -246,12 +241,6 @@ int main(){
     CodeGenerator myCodeGen = CodeGenerator(func_name, opts);
     myCodeGen.add(J_v_func);
     myCodeGen.add(J_vv_func);
-
-    myCodeGen.add(ceq0_func);
-    myCodeGen.add(ceq0_v_func);
-
-    myCodeGen.add(ceq1_func);
-    myCodeGen.add(ceq1_v_func);
 
     myCodeGen.add(cineq1_max_func);
     myCodeGen.add(cineq1_min_func);
@@ -267,6 +256,8 @@ int main(){
     myCodeGen.add(cineq6_min_func);
     myCodeGen.add(cineq7_max_func);
     myCodeGen.add(cineq7_min_func);
+    myCodeGen.add(cineq8_max_func);
+    myCodeGen.add(cineq8_min_func);
 
     myCodeGen.add(cineq1_max_v_func);
     myCodeGen.add(cineq1_min_v_func);
@@ -282,6 +273,8 @@ int main(){
     myCodeGen.add(cineq6_min_v_func);
     myCodeGen.add(cineq7_max_v_func);
     myCodeGen.add(cineq7_min_v_func);
+    myCodeGen.add(cineq8_max_v_func);
+    myCodeGen.add(cineq8_min_v_func);
 
     myCodeGen.generate(prefix_code);
 

@@ -2,7 +2,10 @@
 #include "dyn_wbc.h"
 #include <iostream>
 
-ofstream dataWBC("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC.txt");
+ofstream dataWBC1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC1.txt");
+ofstream dataWBC2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC2.txt");
+ofstream dataWBC3("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC3.txt");
+ofstream dataWBC4("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC4.txt");
 
 
 using namespace Eigen;
@@ -67,15 +70,54 @@ Eigen::VectorQd DynWBC::computeDynamicWBC()
     {
         torque_sol = F_.head(MODEL_DOF);
         contact_wrench_sol = F_.tail(12);
+
+        Eigen::MatrixXd S_T = Eigen::MatrixXd::Zero(MODEL_DOF_VIRTUAL, MODEL_DOF);
+        S_T.block(6, 0, MODEL_DOF, MODEL_DOF) = Eigen::MatrixXd::Identity(MODEL_DOF, MODEL_DOF);
+        dataWBC1 << qddot_des_from_ik_eigen.transpose() << std::endl;
+        dataWBC2 << (H_inv_eigen * (S_T * torque_sol + J_c_eigen.transpose() * contact_wrench_sol - G_eigen)).transpose() << std::endl;
+        dataWBC3 << torque_sol.transpose() << std::endl;
+        dataWBC4 << contact_wrench_sol.transpose() << std::endl;
     }
     else
     {
+        //--- CONSTRAINTS VIOLATION CHECKER
+        if(is_cannot_solve_qp_init_ == true)   
+        {
+            Eigen::VectorXd Ax = A_ * F_; 
+
+            for (int i = 0; i < A_.rows(); ++i)
+            {
+                double val = Ax(i);
+                double l = lbA_(i);
+                double u = ubA_(i);
+
+                double eps = 1e-5;
+
+                if (val < l - eps)
+                {
+                    std::cerr << "[Constraint Violation] Row " << i << ": " << val << " < lbA = " << l << std::endl;
+                }
+                else if (val > u + eps)
+                {
+                    std::cerr << "[Constraint Violation] Row " << i << ": " << val << " > ubA = " << u << std::endl;
+                }
+            }
+            JointLimitChecker();
+            std::cout << "[VIRTUAL] qddot_des_from_ik_: " << qddot_des_from_ik_eigen.segment(0,6).transpose() << std::endl;
+            std::cout << "[LOWER]   qddot_des_from_ik_: " << qddot_des_from_ik_eigen.segment(6,12).transpose() << std::endl;
+            std::cout << "[UPPER]   qddot_des_from_ik_: " << qddot_des_from_ik_eigen.segment(18,21).transpose() << std::endl;
+            
+            std::cout << "[LOWER]   torque_sol: " << torque_sol.segment(0,12).transpose() << std::endl;
+            std::cout << "[UPPER]   torque_sol: " << torque_sol.segment(12,21).transpose() << std::endl;
+
+            is_cannot_solve_qp_init_ = false;
+        }
+
+
         // std::cout << "Dyn WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
         torque_sol.setZero();
         contact_wrench_sol.setZero();
     }
-
-    dataWBC << torque_sol.transpose() << " " << contact_wrench_sol.transpose() << std::endl;
 
     return(torque_sol);
 }
@@ -87,12 +129,6 @@ void DynWBC::casadiFunctionCall()
 
     J_v_func_          = casadi::external("J_v_func", lib_full_name);
     J_vv_func_         = casadi::external("J_vv_func", lib_full_name);
-
-    ceq0_func_         = casadi::external("ceq0_func", lib_full_name);
-    ceq0_v_func_       = casadi::external("ceq0_v_func", lib_full_name);
-
-    ceq1_func_         = casadi::external("ceq1_func", lib_full_name);
-    ceq1_v_func_       = casadi::external("ceq1_v_func", lib_full_name);
 
     cineq1_max_func_   = casadi::external("cineq1_max_func", lib_full_name);
     cineq1_max_v_func_ = casadi::external("cineq1_max_v_func", lib_full_name);
@@ -108,6 +144,8 @@ void DynWBC::casadiFunctionCall()
     cineq6_max_v_func_ = casadi::external("cineq6_max_v_func", lib_full_name);
     cineq7_max_func_   = casadi::external("cineq7_max_func", lib_full_name);
     cineq7_max_v_func_ = casadi::external("cineq7_max_v_func", lib_full_name);
+    cineq8_max_func_   = casadi::external("cineq8_max_func", lib_full_name);
+    cineq8_max_v_func_ = casadi::external("cineq8_max_v_func", lib_full_name);
 
     cineq1_min_func_   = casadi::external("cineq1_min_func", lib_full_name);
     cineq1_min_v_func_ = casadi::external("cineq1_min_v_func", lib_full_name);
@@ -123,12 +161,14 @@ void DynWBC::casadiFunctionCall()
     cineq6_min_v_func_ = casadi::external("cineq6_min_v_func", lib_full_name);
     cineq7_min_func_   = casadi::external("cineq7_min_func", lib_full_name);
     cineq7_min_v_func_ = casadi::external("cineq7_min_v_func", lib_full_name);
+    cineq8_min_func_   = casadi::external("cineq8_min_func", lib_full_name);
+    cineq8_min_v_func_ = casadi::external("cineq8_min_v_func", lib_full_name);
 
     std::cout << "CASADI FUNCTION CALL SUCCESS!" << std::endl;
 }
 
 void DynWBC::setRobotSystemParameters(const double& mu, const double& foot_size, const double& foot_width, const int& contact_dim, 
-                                      const Eigen::VectorQd& torque_lim, const Eigen::VectorQd& q_pos_l_lim, const Eigen::VectorQd& q_pos_h_lim, 
+                                      const Eigen::VectorQd& torque_lim, const Eigen::VectorQd& q_pos_l_lim, const Eigen::VectorQd& q_pos_h_lim, const Eigen::VectorQd& q_vel_l_lim, const Eigen::VectorQd& q_vel_h_lim, 
                                       const double& force_z_max, const double& force_z_min)
 {
     //--- Friction, Contact, Torque limit constraints
@@ -142,6 +182,8 @@ void DynWBC::setRobotSystemParameters(const double& mu, const double& foot_size,
     EigenToCasadiDM<Eigen::VectorQd>(torque_lim_, torque_lim, torque_lim.size(), 1);
     EigenToCasadiDM<Eigen::VectorQd>(q_pos_l_lim_, q_pos_l_lim, q_pos_l_lim.size(), 1);
     EigenToCasadiDM<Eigen::VectorQd>(q_pos_h_lim_, q_pos_h_lim, q_pos_h_lim.size(), 1);
+    EigenToCasadiDM<Eigen::VectorQd>(q_vel_l_lim_, q_vel_l_lim, q_vel_l_lim.size(), 1);
+    EigenToCasadiDM<Eigen::VectorQd>(q_vel_h_lim_, q_vel_h_lim, q_vel_h_lim.size(), 1);
 }
 
 void DynWBC::setWbcWeights(const Eigen::VectorVQd& W_Q, const Eigen::VectorQd& W_torque, const Eigen::VectorXd& W_lambda, const Eigen::VectorQd& W_torque_prev)
@@ -153,22 +195,31 @@ void DynWBC::setWbcWeights(const Eigen::VectorVQd& W_Q, const Eigen::VectorQd& W
     EigenToCasadiDM<Eigen::VectorQd>( W_torque_prev_, W_torque_prev, W_torque_prev.size(), 1);
 }
 
-void DynWBC::getRobotStates(const Eigen::MatrixVQVQd& H, 
+void DynWBC::getRobotStates(const Eigen::MatrixVQVQd& H_inv, 
                             const Eigen::VectorVQd& G, 
                             const Eigen::MatrixXd& J_c, 
                             const Eigen::VectorVQd& qddot_des_from_ik,
                             const Eigen::VectorQd& q,
                             const Eigen::VectorQd& qdot)
 {
-    EigenToCasadiDM<Eigen::MatrixVQVQd>(H_, H, H.rows(), H.cols());
+    EigenToCasadiDM<Eigen::MatrixVQVQd>(H_inv_, H_inv, H_inv.rows(), H_inv.cols());
     EigenToCasadiDM<Eigen::VectorVQd>(G_, G, G.size(), 1);
     EigenToCasadiDM<Eigen::MatrixXd>(J_c_, J_c, J_c.rows(), J_c.cols());
     EigenToCasadiDM<Eigen::VectorVQd>(qddot_des_from_ik_,  qddot_des_from_ik,  qddot_des_from_ik.size(), 1);
 
+    H_inv_eigen.setZero(); H_inv_eigen = H_inv;
+    G_eigen.setZero(); G_eigen = G;
+    J_c_eigen.setZero(J_c.rows(), J_c.cols()); J_c_eigen = J_c;
+    qddot_des_from_ik_eigen.setZero(); qddot_des_from_ik_eigen = qddot_des_from_ik;
+
     Eigen::VectorQd torque; torque.setZero();
     Eigen::VectorXd lambda; lambda.setZero(J_c.rows());
+    Eigen::VectorXd lambda_des; lambda_des.setZero(J_c.rows());
+    lambda_des(2) = G(2) / 2.0; 
+    lambda_des(8) = G(2) / 2.0;
     EigenToCasadiDM<Eigen::VectorQd>(torque_, torque, torque.size(), 1);
     EigenToCasadiDM<Eigen::VectorXd>(lambda_, lambda, lambda.size(), 1);
+    EigenToCasadiDM<Eigen::VectorXd>(lambda_des_, lambda_des, lambda_des.size(), 1);
 
     EigenToCasadiDM<Eigen::VectorQd>(q_,       q,    q.size(), 1);
     EigenToCasadiDM<Eigen::VectorQd>(qdot_, qdot, qdot.size(), 1);
@@ -178,33 +229,19 @@ void DynWBC::getRobotStates(const Eigen::MatrixVQVQd& H,
 
 void DynWBC::calcCostHess()
 {
-    std::vector<casadi::DM> Hess_dm = J_vv_func_(std::vector<casadi::DM>{H_, G_, J_c_, qdot_, qddot_des_from_ik_, torque_, torque_sol_, lambda_, W_Q_, W_torque_, W_lambda_, W_torque_prev_});
+    std::vector<casadi::DM> Hess_dm = J_vv_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, qdot_, qddot_des_from_ik_, torque_, torque_sol_, lambda_, lambda_des_, W_Q_, W_torque_, W_lambda_, W_torque_prev_});
     Hess_ = CasadiDMVectorToEigen<Eigen::MatrixXd>(Hess_dm);
 }
 
 void DynWBC::calcCostGrad()
 {
-    std::vector<casadi::DM> grad_dm = J_v_func_(std::vector<casadi::DM>{H_, G_, J_c_, qdot_, qddot_des_from_ik_, torque_, torque_sol_, lambda_, W_Q_, W_torque_, W_lambda_, W_torque_prev_});
+    std::vector<casadi::DM> grad_dm = J_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, qdot_, qddot_des_from_ik_, torque_, torque_sol_, lambda_, lambda_des_, W_Q_, W_torque_, W_lambda_, W_torque_prev_});
     grad_ = CasadiDMVectorToEigen<Eigen::VectorXd>(grad_dm);
 }
 
 void DynWBC::calcEqualityConstraint()
 {
-    //--- Contact constraint
-    // std::vector<casadi::DM> ceq0_dm   =   ceq0_func_(std::vector<casadi::DM>{H_, G_, J_c_, qddot_des_from_ik_, torque_, lambda_});
-    // std::vector<casadi::DM> ceq0_v_dm = ceq0_v_func_(std::vector<casadi::DM>{H_, G_, J_c_, qddot_des_from_ik_, torque_, lambda_});
 
-    // constraints_.push_back({CasadiDMVectorToEigen<Eigen::MatrixXd>(ceq0_v_dm), 
-    //                (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(ceq0_dm), 
-    //                (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(ceq0_dm)});
-
-    //--- Virtual Joint Constraint
-    std::vector<casadi::DM> ceq1_dm   =   ceq1_func_(std::vector<casadi::DM>{H_, G_, J_c_, qddot_des_from_ik_, lambda_});
-    std::vector<casadi::DM> ceq1_v_dm = ceq1_v_func_(std::vector<casadi::DM>{H_, G_, J_c_, qddot_des_from_ik_, lambda_});
-
-    constraints_.push_back({CasadiDMVectorToEigen<Eigen::MatrixXd>(ceq1_v_dm), 
-                   (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(ceq1_dm), 
-                   (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(ceq1_dm)});
 }
 
 void DynWBC::calcInequalityConstraint()
@@ -234,16 +271,18 @@ void DynWBC::calcInequalityConstraint()
     
     std::vector<casadi::DM> cineq6_max_dm = cineq6_max_func_(std::vector<casadi::DM>{torque_, torque_lim_});
     std::vector<casadi::DM> cineq6_min_dm = cineq6_min_func_(std::vector<casadi::DM>{torque_, torque_lim_});
-    
     std::vector<casadi::DM> cineq6_max_v_dm = cineq6_max_v_func_(std::vector<casadi::DM>{torque_, torque_lim_});
     std::vector<casadi::DM> cineq6_min_v_dm = cineq6_min_v_func_(std::vector<casadi::DM>{torque_, torque_lim_});
     
-    std::vector<casadi::DM> cineq7_max_dm = cineq7_max_func_(std::vector<casadi::DM>{H_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_h_lim_, alpha1, alpha2});
-    std::vector<casadi::DM> cineq7_min_dm = cineq7_min_func_(std::vector<casadi::DM>{H_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_l_lim_, alpha1, alpha2});
+    std::vector<casadi::DM> cineq7_max_dm = cineq7_max_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_h_lim_, alpha1, alpha2});
+    std::vector<casadi::DM> cineq7_min_dm = cineq7_min_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_l_lim_, alpha1, alpha2});
+    std::vector<casadi::DM> cineq7_max_v_dm = cineq7_max_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_h_lim_, alpha1, alpha2});
+    std::vector<casadi::DM> cineq7_min_v_dm = cineq7_min_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_l_lim_, alpha1, alpha2});
     
-    std::vector<casadi::DM> cineq7_max_v_dm = cineq7_max_v_func_(std::vector<casadi::DM>{H_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_h_lim_, alpha1, alpha2});
-    std::vector<casadi::DM> cineq7_min_v_dm = cineq7_min_v_func_(std::vector<casadi::DM>{H_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_l_lim_, alpha1, alpha2});
-
+    std::vector<casadi::DM> cineq8_max_dm = cineq8_max_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_h_lim_, alpha3});
+    std::vector<casadi::DM> cineq8_min_dm = cineq8_min_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_l_lim_, alpha3});
+    std::vector<casadi::DM> cineq8_max_v_dm = cineq8_max_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_h_lim_, alpha3});
+    std::vector<casadi::DM> cineq8_min_v_dm = cineq8_min_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_l_lim_, alpha3});
 
     //--- (2) CasADi To Eigen
     Eigen::MatrixXd A1   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq1_max_v_dm);
@@ -263,66 +302,74 @@ void DynWBC::calcInequalityConstraint()
     Eigen::MatrixXd A5_min = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq5_min_v_dm);
 
     Eigen::MatrixXd A6 = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_max_v_dm);
-    Eigen::VectorXd lbA6 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_max_dm);
-    Eigen::VectorXd ubA6 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_min_dm);
+    Eigen::VectorXd lbA6 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_min_dm);
+    Eigen::VectorXd ubA6 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_max_dm);
 
     Eigen::MatrixXd A7 = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_max_v_dm);
-    Eigen::VectorXd lbA7 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_max_dm);
-    Eigen::VectorXd ubA7 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_min_dm);
+    Eigen::VectorXd lbA7 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_min_dm);
+    Eigen::VectorXd ubA7 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_max_dm);
+
+    Eigen::MatrixXd A8 = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq8_max_v_dm);
+    Eigen::VectorXd lbA8 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq8_min_dm);
+    Eigen::VectorXd ubA8 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq8_max_dm);
 
     //--- (3) Stack Constraints 
-    constraints_.push_back({A1, lbA1, ubA1});
+    constraints_.push_back({A6, lbA6, ubA6});   // --- Torque Boundary (Size 33)
 
-    constraints_.push_back({
+    constraints_.push_back({A7, lbA7, ubA7});   // --- Joint Pos Boundary (Size 33)
+
+    // constraints_.push_back({A8, lbA8, ubA8});   // --- Joint Vel Boundary (Size 33)
+
+    constraints_.push_back({A1, lbA1, ubA1});   // --- Size 2
+
+    constraints_.push_back({    // --- Size 2
         A2_max,
         Eigen::VectorXd::Constant(A2_max.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A2_max.rows())
     });
 
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A2_min,
         Eigen::VectorXd::Constant(A2_min.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A2_min.rows())
     });
 
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A3_max,
         Eigen::VectorXd::Constant(A3_max.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A3_max.rows())
     });
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A3_min,
         Eigen::VectorXd::Constant(A3_min.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A3_min.rows())
     });
 
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A4_max,
         Eigen::VectorXd::Constant(A4_max.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A4_max.rows())
     });
 
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A4_min,
         Eigen::VectorXd::Constant(A4_min.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A4_min.rows())
     });
 
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A5_max,
         Eigen::VectorXd::Constant(A5_max.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A5_max.rows())
     });
 
-    constraints_.push_back({
+    constraints_.push_back({    // --- Size 2
         A5_min,
         Eigen::VectorXd::Constant(A5_min.rows(), -std::numeric_limits<double>::infinity()),
         Eigen::VectorXd::Zero(A5_min.rows())
     });
 
-    constraints_.push_back({A6, lbA6, ubA6});
-
-    constraints_.push_back({A7, lbA7, ubA7});
+    //--- TOTAL INEQUALITY SIZE: 2 * 9 + 33 * 3 = 117
 }
 
 void DynWBC::checkGradHessSize()
@@ -342,8 +389,7 @@ void DynWBC::checkGradHessSize()
         std::cout << "ubA size: " << ubA_.size() << std::endl;
         std::cout << std::endl;
 
-        JointLimitChecker();
-
+        // std::cout << setprecision(3) << std::endl;
         // std::cout << "Hess_: " << Hess_ << std::endl;
         // std::cout << "grad_: " << grad_.transpose() << std::endl;
         // std::cout << std::endl;
@@ -351,10 +397,10 @@ void DynWBC::checkGradHessSize()
         // std::cout << "A: " << A_ << std::endl;
         // std::cout << "lbA: " << lbA_.transpose() << std::endl;
         // std::cout << "ubA: " << ubA_.transpose() << std::endl;
-        std::cout << std::endl;
+        // std::cout << std::endl;
 
         // std::cout << "==== INPUT CHECK ====" << std::endl;
-        // std::cout << "H_: \n" << H_ << std::endl;
+        // std::cout << "H_inv_: \n" << H_inv_ << std::endl;
         // std::cout << "G_: \n" << G_ << std::endl;
         // std::cout << "J_c_: \n" << J_c_ << std::endl;
         // std::cout << "qddot_des_from_ik_: \n" << qddot_des_from_ik_ << std::endl;
@@ -363,7 +409,6 @@ void DynWBC::checkGradHessSize()
 
         is_gradhess_init_ = false;
     }
-
 }
 
 
@@ -432,7 +477,7 @@ void DynWBC::JointLimitChecker()
 
     if (violated_indices.empty())
     {
-        std::cout << "[JOINT LIMIT CHECK] All joints are within limits." << std::endl;
+        // std::cout << "[JOINT LIMIT CHECK] All joints are within limits." << std::endl;
     }
     else
     {

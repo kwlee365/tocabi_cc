@@ -2,6 +2,9 @@
 
 using namespace TOCABI;
 
+ofstream dataCC1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC1.txt");
+ofstream dataCC2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC2.txt");
+
 CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_VIRTUAL), dyn_wbc_(MODEL_DOF_VIRTUAL)
 {
     nh_cc_.setCallbackQueue(&queue_cc_);
@@ -53,20 +56,22 @@ void CustomController::computeSlow()
         {
             saveInitialState();
 
-            dyn_wbc_.setRobotSystemParameters(0.7,                 // Friction Coefficient
+            dyn_wbc_.setRobotSystemParameters(0.8,                 // Friction Coefficient
                                               0.3,                 // Foot size
-                                              0.26,                // Foot width
+                                              0.16,                // Foot width
                                               2,                   // Contact Dim
                                               rd_.torque_limit,    // Torque limit
                                               joint_pos_limit_l_,
                                               joint_pos_limit_h_,
+                                              joint_vel_limit_l_,
+                                              joint_vel_limit_h_,
                                               1500.0,              // Max vertical contact force
-                                              0.0);                // Min vertical contact force
+                                              100.0);                // Min vertical contact force
 
-            Eigen::VectorVQd W_Q;      W_Q      = 1000.0 * Eigen::VectorVQd::Ones();
+            Eigen::VectorVQd W_Q;      W_Q      = 2000.0 * Eigen::VectorVQd::Ones();
             Eigen::VectorQd  W_torque; W_torque = 1.0 * Eigen::VectorQd::Ones();
-            Eigen::Vector12d W_lambda; W_lambda = 1.0 * Eigen::Vector12d::Ones();
-            Eigen::VectorQd  W_torque_prev; W_torque_prev = 1000.0 * Eigen::VectorQd::Ones();
+            Eigen::Vector12d W_lambda; W_lambda = 1e-3 * Eigen::Vector12d::Ones();
+            Eigen::VectorQd  W_torque_prev; W_torque_prev = 2000.0 * Eigen::VectorQd::Ones();
             dyn_wbc_.setWbcWeights(W_Q, W_torque, W_lambda, W_torque_prev);
 
             cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
@@ -75,32 +80,30 @@ void CustomController::computeSlow()
             is_mode_7_init = false;
         }
 
-        motion_mode_ = TestMotionType::PelvHand;
-        runTestMotion(2.0, 0.1, 0.2);
+        motion_mode_ = TestMotionType::PelvHandJoy;
+        runTestMotion(1.0, 0.05, 0.2);
 
-        static Eigen::VectorXd dq_des, qdot_des, qddot_des;
-        kin_wbc_.computeKinematicWBC(task_hierarchy,
-                                     x_desired, dx_desired, ddx_desired,
-                                     R_desired, w_desired, dw_desired,
-                                     task_Kp, task_Kv, 
-                                     base_ee_pos, base_ee_rot,
-                                     base_ee_v, base_ee_w,
-                                     base_Jac_v, base_Jac_w,
-                                     base_Jacdot_v, base_Jacdot_w,
-                                     base_contact_Jac,
-                                     M_inv_, rd_.q_dot_virtual_,
-                                     dq_des, qdot_des, qddot_des);
+        kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
+                                              x_desired, dx_desired, ddx_desired,
+                                              R_desired, w_desired, dw_desired,
+                                              task_Kp, task_Kv, 
+                                              base_ee_pos, base_ee_rot,
+                                              base_ee_v, base_ee_w,
+                                              base_Jac_v, base_Jac_w,
+                                              base_contact_Jac,
+                                              M_inv_, rd_.q_dot_virtual_,
+                                              dq_des, qdot_des, qddot_des);
 
-        rd_.q_desired += qdot_des.tail(MODEL_DOF) / hz_;
+        rd_.q_desired += qdot_des.segment(6, MODEL_DOF) / hz_;
 
         Eigen::VectorQd torque_unbound; torque_unbound.setZero();
-        
-        //--- Dynamic
-        dyn_wbc_.getRobotStates(M_, G_, base_contact_Jac, qddot_des, rd_.q_, rd_.q_dot_);
+        dyn_wbc_.getRobotStates(M_inv_, G_, base_contact_Jac, qddot_des, rd_.q_, rd_.q_dot_);
         torque_unbound = dyn_wbc_.computeDynamicWBC(); 
-        // torque_unbound = dyn_wbc_.computeDynamicWBC() + Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_); 
-        // torque_unbound = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_); 
-        
+        // torque_unbound = dyn_wbc_.computeDynamicWBC() + Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (qdot_des.segment(6, MODEL_DOF) - rd_.q_dot_);  
+
+        dataCC1 << dx_desired[base_link_name].transpose() << " " << base_ee_v[base_link_name].transpose() << std::endl;
+        dataCC2 << w_desired[base_link_name].transpose() << " " << base_ee_w[base_link_name].transpose() << std::endl;
+
 
         //--- Final Torque Command
         Eigen::VectorQd torque_bound;   torque_bound.setZero();
@@ -192,21 +195,23 @@ void CustomController::loadParams()
     }
 
     // Task Gain
-    task_Kp[base_link_name]  = 100.0 * Eigen::Vector3d::Ones();
-    task_Kp[chest_link_name] = 100.0 * Eigen::Vector3d::Ones();
-    task_Kp[head_link_name]  = 100.0 * Eigen::Vector3d::Ones();
-    task_Kp[lfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
-    task_Kp[rfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
-    task_Kp[lhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
-    task_Kp[rhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[base_link_name]  = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[chest_link_name] = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[head_link_name]  = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[lfoot_link_name] = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[rfoot_link_name] = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[lhand_link_name] = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[rhand_link_name] = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[com_name] = 400.0 * Eigen::Vector3d::Ones();
 
-    task_Kv[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
-    task_Kv[chest_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_Kv[head_link_name]  = 10.0 * Eigen::Vector3d::Ones();
-    task_Kv[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_Kv[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_Kv[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_Kv[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[base_link_name]  = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[chest_link_name] = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[head_link_name]  = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[lfoot_link_name] = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[rfoot_link_name] = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[lhand_link_name] = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[rhand_link_name] = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[com_name] = 40.0 * Eigen::Vector3d::Ones();
 }
 
 void CustomController::moveInitialPose()
@@ -245,7 +250,7 @@ void CustomController::moveInitialPose()
 void CustomController::stateManager()
 {
     Eigen::Vector3d base_pos = rd_.link_[Pelvis].xpos; 
-    Eigen::Matrix3d base_rot = rd_.link_[Pelvis].rotm; 
+    Eigen::Matrix3d base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[Pelvis].rotm)(2)); 
     contact_Jac.setZero(12, MODEL_DOF_VIRTUAL);
     base_contact_Jac.setZero(12, MODEL_DOF_VIRTUAL);
 
@@ -266,23 +271,8 @@ void CustomController::stateManager()
         contact_Jac.block(9, 0, 3, MODEL_DOF_VIRTUAL) = Jac_w[rfoot_link_name]; 
 
         //--- Base frame
-        base_Jac_v_pre[name] = base_Jac_v[name]; 
-        base_Jac_w_pre[name] = base_Jac_w[name]; 
-
         base_Jac_v[name]  = base_rot.transpose() * Jac_v[name];
         base_Jac_w[name]  = base_rot.transpose() * Jac_w[name];
-
-        if(is_derivative_init == true)
-        {
-            base_Jac_v_pre[name] = base_Jac_v[name];
-            base_Jac_w_pre[name] = base_Jac_w[name];
-            
-            is_derivative_init = false;
-        }
-        
-        base_Jacdot_v[name]  = (base_Jac_v[name] - base_Jac_v_pre[name]) * hz_;
-        base_Jacdot_w[name]  = (base_Jac_w[name] - base_Jac_w_pre[name]) * hz_; 
-
         base_ee_pos[name] = base_rot.transpose() * (ee_pos[name] - base_pos);
         base_ee_rot[name] = base_rot.transpose() *  ee_rot[name];                             
         base_ee_v[name]   = base_rot.transpose() *  ee_v[name];                               
@@ -313,9 +303,17 @@ void CustomController::stateManager()
 
     RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, base_q_virtual_, M_temp_, true);
     M_ = M_temp_;
-    M_inv_ = M_.inverse();
+    // M_inv_ = M_.inverse();
+    M_inv_ = M_.llt().solve(MatrixXd::Identity(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL));
+    
     RigidBodyDynamics::NonlinearEffects(model_, base_q_virtual_, Eigen::VectorXd::Zero(MODEL_DOF_QVIRTUAL), G_temp_);
     G_ = G_temp_;
+
+    for (const auto& [name, idx] : link_index_map)
+    {
+        base_Lambda_v[name] = (base_Jac_v[name] * M_ * base_Jac_v[name].transpose()).inverse();
+        base_Lambda_w[name] = (base_Jac_w[name] * M_ * base_Jac_w[name].transpose()).inverse();
+    }
 }
 
 void CustomController::saveInitialState()
@@ -330,7 +328,6 @@ void CustomController::saveInitialState()
     init_base_ee_v = base_ee_v;
     init_base_ee_w = base_ee_w;
 
-
     rd_.q_desired = q_init_des;
 
     for (const auto& [name, idx] : link_index_map)
@@ -343,6 +340,11 @@ void CustomController::saveInitialState()
         w_desired[name]   = Eigen::Vector3d::Zero();
         dw_desired[name]  = Eigen::Vector3d::Zero();
     }
+
+    q_des.segment(6, MODEL_DOF)= q_init_des;
+    dq_des.setZero(); 
+    qdot_des.setZero();
+    qddot_des.setZero(); 
 }
 
 void CustomController::runTestMotion(double traj_time, double pelv_dist, double hand_dist)
@@ -360,6 +362,9 @@ void CustomController::runTestMotion(double traj_time, double pelv_dist, double 
             break;
         case TestMotionType::PelvJoy:
             movePelvPoseJoy(target_vel_x_, target_vel_y_, target_vel_yaw_);
+        case TestMotionType::PelvHandJoy:
+            movePelvHandPoseJoy(target_vel_x_, target_vel_y_, target_vel_yaw_, traj_time, hand_dist);
+            break;
         case TestMotionType::None:
         default:
             break;
@@ -403,9 +408,10 @@ void CustomController::moveHandPose(double traj_time,  double hand_dist)
 {
     task_hierarchy= {
             { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
-            { {chest_link_name, TaskType::Orientation} },
-            { {head_link_name, TaskType::Orientation} },
-            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+            // { {chest_link_name, TaskType::Orientation} },
+            // { {head_link_name, TaskType::Orientation} },
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} },
+            { {com_name, TaskType::Position}}
     };
 
     static int tick = 0;
@@ -477,9 +483,61 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
     x_desired[base_link_name]   = ee_rot[base_link_name].transpose() * (x_desired[base_link_name] - ee_pos[base_link_name]);
     dx_desired[base_link_name]  = ee_rot[base_link_name].transpose() * (dx_desired[base_link_name]);
     ddx_desired[base_link_name] = ee_rot[base_link_name].transpose() * (ddx_desired[base_link_name]);
+}
+
+void CustomController::movePelvPoseJoy(const double& vx, const double& vy, const double& wz)
+{
+    // task_hierarchy= {
+    //     { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+    // };
+    task_hierarchy= {
+            { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+            { {chest_link_name, TaskType::Orientation} },
+            { {head_link_name, TaskType::Orientation} },
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+    };
+
+    //--- Translation
+    x_desired[base_link_name](0) = vx / hz_;
+    x_desired[base_link_name](1) = vy / hz_;
+
+    dx_desired[base_link_name](0) = vx;
+    dx_desired[base_link_name](1) = vy;
+
+    //--- Orientation
+    w_desired[base_link_name](2) = wz;
+
+    Eigen::Vector3d eulerDot_desired = AngvelToEulerRates(w_desired[base_link_name], DyrosMath::rot2Euler(base_ee_rot[base_link_name]));
+    Eigen::Vector3d euler_desired = eulerDot_desired / hz_;
+    R_desired[base_link_name] = DyrosMath::Euler2rot(euler_desired(0), euler_desired(1), euler_desired(2));
+}
+
+void CustomController::movePelvHandPoseJoy(const double& vx, const double& vy, const double& wz, const double& traj_time, const double& hand_dist)
+{
+    task_hierarchy= {
+            { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
+            { {chest_link_name, TaskType::Orientation} },
+            { {head_link_name, TaskType::Orientation} },
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+    };
+
+    static int tick = 0;
+
+    //--- Pelvis Translation
+    x_desired[base_link_name](0) = vx / hz_;
+    x_desired[base_link_name](1) = vy / hz_;
+
+    dx_desired[base_link_name](0) = vx;
+    dx_desired[base_link_name](1) = vy;
+
+    //--- Pelvis Orientation
+    w_desired[base_link_name](2) = wz;
+
+    Eigen::Vector3d eulerDot_desired = AngvelToEulerRates(w_desired[base_link_name], DyrosMath::rot2Euler(base_ee_rot[base_link_name]));
+    Eigen::Vector3d euler_desired = eulerDot_desired / hz_;
+    R_desired[base_link_name] = DyrosMath::Euler2rot(euler_desired(0), euler_desired(1), euler_desired(2));
 
     //--- Hand Test
-
     x_desired[lhand_link_name](2) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
                                                      init_base_ee_pos[lhand_link_name](2), 
                                                      init_base_ee_pos[lhand_link_name](2) + hand_dist, 
@@ -510,28 +568,7 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
                                                            init_base_ee_pos[rhand_link_name](2) - hand_dist, 
                                                            0.0, 0.0);
 
-                                                           tick++;
-}
-
-void CustomController::movePelvPoseJoy(const double& vx, const double& vy, const double& wz)
-{
-    task_hierarchy= {
-        { {base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation} },
-    };
-
-    //--- Translation
-    x_desired[base_link_name](0) = vx / hz_;
-    x_desired[base_link_name](1) = vy / hz_;
-
-    dx_desired[base_link_name](0) = vx;
-    dx_desired[base_link_name](1) = vy;
-
-    //--- Orientation
-    w_desired[base_link_name](2) = wz;
-
-    Eigen::Vector3d eulerDot_desired = AngvelToEulerRates(w_desired[base_link_name], DyrosMath::rot2Euler(base_ee_rot[base_link_name]));
-    Eigen::Vector3d euler_desired = eulerDot_desired / hz_;
-    R_desired[base_link_name] = DyrosMath::Euler2rot(euler_desired(0), euler_desired(1), euler_desired(2));
+    tick++;
 }
 
 //--- Joy Utils
@@ -544,7 +581,7 @@ void CustomController::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
 
 void CustomController::xBoxJoyCallback(const sensor_msgs::Joy::ConstPtr& joy)
 {
-    double vel_threshold = 0.1;
+    double vel_threshold = 0.2;
 
     target_vel_x_   = DyrosMath::minmax_cut(joy->axes[1] * vel_threshold, -vel_threshold, vel_threshold);
     target_vel_y_   = DyrosMath::minmax_cut(joy->axes[0] * vel_threshold, -vel_threshold, vel_threshold);

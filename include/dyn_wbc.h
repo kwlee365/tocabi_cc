@@ -10,6 +10,7 @@
 #include <filesystem>
 #include "wholebody_functions.h"
 #include "task_definition.h"
+#include <iomanip>
 
 struct ConstraintMatrix {
     Eigen::MatrixXd A;
@@ -29,10 +30,10 @@ public:
 
     //--- QP WBC 
     void setRobotSystemParameters(const double& mu, const double& foot_size, const double& foot_width, const int& contact_dim, 
-                                  const Eigen::VectorQd& torque_lim, const Eigen::VectorQd& q_pos_l_lim, const Eigen::VectorQd& q_pos_h_lim, 
+                                  const Eigen::VectorQd& torque_lim, const Eigen::VectorQd& q_pos_l_lim, const Eigen::VectorQd& q_pos_h_lim, const Eigen::VectorQd& q_vel_l_lim, const Eigen::VectorQd& q_vel_h_lim,  
                                   const double& force_z_max, const double& force_z_min);
-    void setWbcWeights(const Eigen::VectorVQd& W_Q, const Eigen::VectorQd& W_torque, const Eigen::VectorXd& W_lambda, const Eigen::VectorQd& W_energy);
-    void getRobotStates(const Eigen::MatrixVQVQd& H, 
+    void setWbcWeights(const Eigen::VectorVQd& W_Q, const Eigen::VectorQd& W_torque, const Eigen::VectorXd& W_lambda, const Eigen::VectorQd& W_torque_prev);
+    void getRobotStates(const Eigen::MatrixVQVQd& H_inv, 
                         const Eigen::VectorVQd& G, 
                         const Eigen::MatrixXd& J_c, 
                         const Eigen::VectorVQd& qddot_des_from_ik,
@@ -71,10 +72,9 @@ private:
     int dof_;
     bool is_gradhess_init_ = true;
     bool is_wbc_init_ = true;
+    bool is_cannot_solve_qp_init_ = true;
 
     casadi::Function J_v_func_, J_vv_func_;
-    casadi::Function ceq0_func_, ceq0_v_func_;
-    casadi::Function ceq1_func_, ceq1_v_func_;
 
     casadi::Function cineq1_max_func_, cineq1_max_v_func_;
     casadi::Function cineq2_max_func_, cineq2_max_v_func_;
@@ -83,6 +83,7 @@ private:
     casadi::Function cineq5_max_func_, cineq5_max_v_func_;
     casadi::Function cineq6_max_func_, cineq6_max_v_func_;
     casadi::Function cineq7_max_func_, cineq7_max_v_func_;
+    casadi::Function cineq8_max_func_, cineq8_max_v_func_;
 
     casadi::Function cineq1_min_func_, cineq1_min_v_func_;
     casadi::Function cineq2_min_func_, cineq2_min_v_func_;
@@ -91,25 +92,33 @@ private:
     casadi::Function cineq5_min_func_, cineq5_min_v_func_;
     casadi::Function cineq6_min_func_, cineq6_min_v_func_;
     casadi::Function cineq7_min_func_, cineq7_min_v_func_;
+    casadi::Function cineq8_min_func_, cineq8_min_v_func_;
 
     //--- Local variables
-    casadi::DM H_; 
+    casadi::DM H_inv_; 
     casadi::DM G_; 
     casadi::DM J_c_; 
     casadi::DM qddot_des_from_ik_; 
     casadi::DM torque_; 
     casadi::DM torque_sol_; 
-    casadi::DM lambda_; 
     casadi::DM torque_lim_; 
+    casadi::DM lambda_; 
+    casadi::DM lambda_des_; 
     casadi::DM W_Q_; 
     casadi::DM W_torque_; 
     casadi::DM W_lambda_;
     casadi::DM W_torque_prev_;
     casadi::DM q_pos_l_lim_;
     casadi::DM q_pos_h_lim_;
+    casadi::DM q_vel_l_lim_;
+    casadi::DM q_vel_h_lim_;
     casadi::DM q_;
     casadi::DM qdot_;
     //--- Solution
+    Eigen::MatrixVQVQd H_inv_eigen; 
+    Eigen::VectorVQd G_eigen; 
+    Eigen::MatrixXd J_c_eigen; 
+    Eigen::VectorVQd qddot_des_from_ik_eigen; 
     Eigen::VectorQd torque_sol;
     Eigen::Vector12d contact_wrench_sol;
 
@@ -122,6 +131,7 @@ private:
 
     double alpha1 = 10.0;
     double alpha2 = 10.0;
+    double alpha3 = 10.0;
 };
 
 #endif  // DYN_WBC_H
