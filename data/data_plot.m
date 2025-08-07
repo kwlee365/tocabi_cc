@@ -66,8 +66,8 @@ dataCC = readmatrix('dataCC3.txt');
 rfoot_pos = dataCC(:, 1:6);
 dataCC = readmatrix('dataCC4.txt');
 lhand_rot = dataCC(:, 1:6);
-dataCC = readmatrix('dataCC5.txt');
-base_rot = dataCC(:, 1:6);
+% dataCC = readmatrix('dataCC5.txt');
+% base_rot = dataCC(:, 1:6);
 
 
 figure()

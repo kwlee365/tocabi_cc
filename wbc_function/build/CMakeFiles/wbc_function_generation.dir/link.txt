@@ -1,1 +1,0 @@
-/usr/bin/g++ -Wall -Wextra -pthread -O3  -Wl,-rpath -Wl,/home/kwan/catkin_ws/src/tocabi_cc/wbc_function/build CMakeFiles/wbc_function_generation.dir/src/wbc_function_generation.cpp.o -o wbc_function_generation  -Wl,-rpath,/usr/local/lib /usr/local/lib/libcasadi.so

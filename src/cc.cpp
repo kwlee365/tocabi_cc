@@ -81,7 +81,8 @@ void CustomController::computeSlow()
             contactStateManager();
 
             // motion_mode_ = TestMotionType::Taichi;
-            motion_mode_ = TestMotionType::PelvHand;
+            // motion_mode_ = TestMotionType::PelvHand;
+            motion_mode_ = TestMotionType::PelvHandJoy;
             runTestMotion(5.0, 0.1, 0.2, 0.2, 0.6);
 
             taskStateManager();
@@ -775,35 +776,35 @@ void CustomController::movePelvHandPoseJoy(const double& vx, const double& vy, c
     //--- Hand Test
     for (int idx = 1; idx < 3; idx++)
     {
-        x_desired[lhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
-                                                        init_support_ee_pos[lhand_link_name](idx), 
-                                                        init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
-                                                        0.0, 0.0);
+        support_x_desired[lhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                           init_support_ee_pos[lhand_link_name](idx), 
+                                                           init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
+                                                           0.0, 0.0);
 
-        dx_desired[lhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[lhand_link_name](idx), 
-                                                            init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
-                                                            0.0, 0.0);
+        support_dx_desired[lhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                               init_support_ee_pos[lhand_link_name](idx), 
+                                                               init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
+                                                               0.0, 0.0);
 
-        ddx_desired[lhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[lhand_link_name](idx), 
-                                                            init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
-                                                            0.0, 0.0);
+        support_ddx_desired[lhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                                 init_support_ee_pos[lhand_link_name](idx), 
+                                                                 init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
+                                                                 0.0, 0.0);
 
-        x_desired[rhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
-                                                        init_support_ee_pos[rhand_link_name](idx), 
-                                                        init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
-                                                        0.0, 0.0);
+        support_x_desired[rhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
+                                                           init_support_ee_pos[rhand_link_name](idx), 
+                                                           init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
+                                                           0.0, 0.0);
 
-        dx_desired[rhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[rhand_link_name](idx), 
-                                                            init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
-                                                            0.0, 0.0);
+        support_dx_desired[rhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
+                                                               init_support_ee_pos[rhand_link_name](idx), 
+                                                               init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
+                                                               0.0, 0.0);
 
-        ddx_desired[rhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[rhand_link_name](idx), 
-                                                            init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
-                                                            0.0, 0.0);
+        support_ddx_desired[rhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
+                                                                 init_support_ee_pos[rhand_link_name](idx), 
+                                                                 init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
+                                                                 0.0, 0.0);
     }
 
     //--- Data Logging

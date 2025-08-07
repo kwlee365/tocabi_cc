@@ -1,1 +1,0 @@
-/usr/bin/g++ -Wall -Wextra -pthread -O3  -Wl,-rpath -Wl,/home/kwan/catkin_ws/src/tocabi_cc/wbc_function/build CMakeFiles/fk_generation.dir/src/fk_generation.cpp.o -o fk_generation  -Wl,-rpath,/usr/local/lib /usr/local/lib/libcasadi.so
