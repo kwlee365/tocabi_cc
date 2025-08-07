@@ -17,7 +17,7 @@ using namespace qpOASES;
 
 DynWBC::DynWBC(int dof) : dof_(dof) { }
 
-Eigen::VectorQd DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_)
+bool DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_, Eigen::VectorQd& torque_unbound)
 {
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
     //--- Initialization
@@ -71,10 +71,13 @@ Eigen::VectorQd DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo
     QP_Dyn_Wbc.DeleteSubjectToAx();
     QP_Dyn_Wbc.UpdateSubjectToAx(A_const, lbA_const, ubA_const);
 
+    bool qp_status = true;
     Eigen::VectorXd X_; X_.setZero(total_num_state);
     if(QP_Dyn_Wbc.SolveQPoases(500, X_, true))
     {
         torque_sol  = X_.segment(0, MODEL_DOF);
+
+        qp_status = true;
     }
     else
     {
@@ -104,8 +107,8 @@ Eigen::VectorQd DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo
         }
 
 
-        // std::cout << "Dyn WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
-        torque_sol.setZero();
+        std::cout << "Dyn WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
+        qp_status = false;
     }
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
 
@@ -117,7 +120,10 @@ Eigen::VectorQd DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo
     dataWBC4 << (J_contact_inv_T * torque_sol).transpose() << std::endl; 
     dataWBC5 << F_contact.transpose() << std::endl; 
 
-    return(torque_sol);
+    //---Return 
+    torque_unbound = torque_sol;
+
+    return(qp_status);
 }
 
 void DynWBC::setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_, const double& force_z_max_, const double& force_z_min_, 

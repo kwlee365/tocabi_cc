@@ -49,6 +49,7 @@ public:
     //--- State Machine
     bool is_mode_6_init = true;
     bool is_mode_7_init = true;
+    bool is_mode_7_working = true;
     bool is_torque_desired_init = true;
     bool is_derivative_init = true;
     bool is_torque_transition = false;

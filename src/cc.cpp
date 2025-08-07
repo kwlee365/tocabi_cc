@@ -54,105 +54,126 @@ void CustomController::computeSlow()
     }
     else if (rd_.tc_.mode == 7)
     {
-        stateManager();
-
-        if(is_mode_7_init == true)
+        if(is_mode_7_working == true)
         {
-            saveInitialState();
-            dyn_wbc_.setRobotSystemParameters(0.8,                 // Friction Coefficient
-                                              0.3,                 // Foot size
-                                              0.16,                // Foot width
-                                              2000.0,              // Max vertical contact force
-                                              0.0,                 // Min Vertical contact force                             
-                                              rd_.torque_limit,    // Torque limit
-                                              joint_pos_limit_l_,
-                                              joint_pos_limit_h_,
-                                              joint_vel_limit_l_,
-                                              joint_vel_limit_h_);
+            stateManager();
 
-            cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
-            cout << "TIME: "<< rd_.control_time_ << endl; 
+            if(is_mode_7_init == true)
+            {
+                saveInitialState();
+                dyn_wbc_.setRobotSystemParameters(0.8,                 // Friction Coefficient
+                                                0.3,                 // Foot size
+                                                0.16,                // Foot width
+                                                2000.0,              // Max vertical contact force
+                                                0.0,                 // Min Vertical contact force                             
+                                                rd_.torque_limit,    // Torque limit
+                                                joint_pos_limit_l_,
+                                                joint_pos_limit_h_,
+                                                joint_vel_limit_l_,
+                                                joint_vel_limit_h_);
 
-            is_mode_7_init = false;
-        }
+                cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
+                cout << "TIME: "<< rd_.control_time_ << endl; 
 
-        contactStateManager();
+                is_mode_7_init = false;
+            }
 
-        motion_mode_ = TestMotionType::PelvHand;
-        runTestMotion(5.0, 0.1, 0.2, 0.2, 0.6);
+            contactStateManager();
 
-        taskStateManager();
+            // motion_mode_ = TestMotionType::Taichi;
+            motion_mode_ = TestMotionType::PelvHand;
+            runTestMotion(5.0, 0.1, 0.2, 0.2, 0.6);
 
-        //--- Whole-body Control
-        for (const auto& task_group : task_hierarchy)
-        {
-            int m = 3 * task_group.size();
-            for (const auto& [name, type] : task_group){ W_task[name] = 1.0 * Eigen::VectorXd::Ones(m);}
-        }
+            taskStateManager();
 
-        W_contact = 1.0 * Eigen::VectorXd::Ones(contact_dim);
-        W_energy = 10.0 * Eigen::VectorQd::Ones();
-        W_torque_prev = 0.0 * Eigen::VectorQd::Ones();
+            //--- Whole-body Control
+            for (const auto& task_group : task_hierarchy)
+            {
+                int m = 3 * task_group.size();
+                for (const auto& [name, type] : task_group){ W_task[name] = 1.0 * Eigen::VectorXd::Ones(m);}
+            }
 
-        dyn_wbc_.setWbcWeights(task_hierarchy, W_task, W_energy, W_contact, W_torque_prev);
+            W_contact = 1.0 * Eigen::VectorXd::Ones(contact_dim);
+            W_energy = 10.0 * Eigen::VectorQd::Ones();
+            W_torque_prev = 0.0 * Eigen::VectorQd::Ones();
 
-        dyn_wbc_.computeTaskImpedance(task_hierarchy,
-                                      task_Kp, task_Kv,
-                                      x_desired, dx_desired, ddx_desired,
-                                      R_desired, w_desired, dw_desired,
-                                      base_ee_pos, base_ee_rot,
-                                      base_ee_v, base_ee_w);
+            dyn_wbc_.setWbcWeights(task_hierarchy, W_task, W_energy, W_contact, W_torque_prev);
 
-        dyn_wbc_.computeContactWrench(contact_mode_, rd_.link_[COM_id].mass * GRAVITY);
+            dyn_wbc_.computeTaskImpedance(task_hierarchy,
+                                        task_Kp, task_Kv,
+                                        x_desired, dx_desired, ddx_desired,
+                                        R_desired, w_desired, dw_desired,
+                                        base_ee_pos, base_ee_rot,
+                                        base_ee_v, base_ee_w);
 
-        dyn_wbc_.getRobotStates(task_hierarchy,
-                                q_,
-                                qdot_,
-                                M_, 
-                                M_inv_, 
-                                G_, 
-                                base_contact_Jac,
-                                base_contact_Jac_dot,
-                                base_contact_lambda,
-                                base_contact_Jac_inv_T,
-                                base_contact_N, 
-                                base_task_Jac_inv_T_S_T,
-                                rd_.torque_desired);
+            dyn_wbc_.computeContactWrench(contact_mode_, rd_.link_[COM_id].mass * GRAVITY);
 
-        //--- Compute QP-based Whole-body Controller 
-        Eigen::VectorQd torque_unbound; torque_unbound.setZero();
-        torque_unbound = dyn_wbc_.computeDynamicWBC(task_hierarchy);
+            dyn_wbc_.getRobotStates(task_hierarchy,
+                                    q_,
+                                    qdot_,
+                                    M_, 
+                                    M_inv_, 
+                                    G_, 
+                                    base_contact_Jac,
+                                    base_contact_Jac_dot,
+                                    base_contact_lambda,
+                                    base_contact_Jac_inv_T,
+                                    base_contact_N, 
+                                    base_task_Jac_inv_T_S_T,
+                                    rd_.torque_desired);
 
-        //--- Torque saturation
-        Eigen::VectorQd torque_bound;   torque_bound.setZero();
-        for (int i = 0; i < MODEL_DOF; i++) {
-            torque_bound(i) = DyrosMath::minmax_cut(torque_unbound(i), -rd_.torque_limit(i), rd_.torque_limit(i));
-        }
+            //--- Compute QP-based Whole-body Controller 
+            Eigen::VectorQd torque_unbound; torque_unbound.setZero();
+            bool qp_status = true;
+            qp_status = dyn_wbc_.computeDynamicWBC(task_hierarchy, torque_unbound);
 
-        static int tick_transition = 0;
-        if(is_left_contact_transition == true || is_right_contact_transition == true)
-        {
-            is_torque_transition = true;
-            tick_transition = 0;
-            torque_transition = torque_bound;
-        }
-        
-        if(is_torque_transition == true)
-        {
+            //--- Torque saturation
+            Eigen::VectorQd torque_bound;   torque_bound.setZero();
             for (int i = 0; i < MODEL_DOF; i++) {
-                torque_bound(i) = DyrosMath::cubic(tick_transition, 0, 200, torque_transition(i), torque_bound(i), 0.0, 0.0);
+                torque_bound(i) = DyrosMath::minmax_cut(torque_unbound(i), -rd_.torque_limit(i), rd_.torque_limit(i));
             }
 
-            tick_transition++;
-
-            if(tick_transition >= 200) {
-                is_torque_transition = false;
+            static int tick_transition = 0;
+            if(is_left_contact_transition == true || is_right_contact_transition == true)
+            {
+                is_torque_transition = true;
+                tick_transition = 0;
+                torque_transition = torque_bound;
             }
+            
+            if(is_torque_transition == true)
+            {
+                for (int i = 0; i < MODEL_DOF; i++) {
+                    torque_bound(i) = DyrosMath::cubic(tick_transition, 0, 200, torque_transition(i), torque_bound(i), 0.0, 0.0);
+                }
+
+                tick_transition++;
+
+                if(tick_transition >= 200) {
+                    is_torque_transition = false;
+                }
+            }
+
+            //--- safety
+            if(qp_status == true)
+            {
+                rd_.torque_desired = torque_bound;
+            }
+            else if (qp_status == false)
+            {
+                ROS_ERROR("QP feasibility violated. Emergency stop activated!");
+
+                rd_.q_desired = rd_.q_;
+                
+                is_mode_7_working = false;
+            }
+
+            dataCC6 << torque_bound.transpose() << std::endl;
         }
-
-        rd_.torque_desired = torque_bound;
-
-        dataCC6 << torque_bound.transpose() << std::endl;
+    }
+    else
+    {
+        rd_.torque_desired = (Kp_diag * (rd_.q_desired - rd_.q_)) - (Kd_diag * rd_.q_dot_);
     }
 }
 

@@ -29,7 +29,7 @@ public:
     //--- QP WBC 
     CQuadraticProgram QP_Dyn_Wbc;
 
-    Eigen::VectorQd computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_);
+    bool computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_, Eigen::VectorQd& torque_unbound);
     void calcCostGrad(const std::vector<std::vector<TaskInfo>>& task_hierarchy_);
     void calcCostHess(const std::vector<std::vector<TaskInfo>>& task_hierarchy_);
     void calcEqualityConstraint();
