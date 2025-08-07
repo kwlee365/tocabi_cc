@@ -6,44 +6,50 @@ ofstream dataWBC1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC1.txt");
 ofstream dataWBC2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC2.txt");
 ofstream dataWBC3("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC3.txt");
 ofstream dataWBC4("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC4.txt");
+ofstream dataWBC5("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC5.txt");
+ofstream dataWBC6("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWBC6.txt");
+
+ofstream qpHessGrad("/home/kwan/catkin_ws/src/tocabi_cc/data/qpHessGrad.txt");
 
 
 using namespace Eigen;
 using namespace qpOASES;
 
-DynWBC::DynWBC(int dof) : dof_(dof) 
-{
-    std::cout << "CURRENT PATH: " << current_path << std::endl;
-    std::cout << "LIBRARY PATH: " << library_path << std::endl;
-    std::cout << "LIBRARY NAME: " << library_name << std::endl;
-    std::cout << "LIBRARY: "      << library_path + library_name << std::endl;
+DynWBC::DynWBC(int dof) : dof_(dof) { }
 
-    casadiFunctionCall();
-}
-
-Eigen::VectorQd DynWBC::computeDynamicWBC()
+Eigen::VectorQd DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_)
 {
+    std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
     //--- Initialization
     constraints_.clear();
-    calcCostHess();
-    calcCostGrad();
+    calcCostHess(task_hierarchy_);
+    calcCostGrad(task_hierarchy_);
     calcEqualityConstraint();
     calcInequalityConstraint();
 
+    if (contact_mode_local != contact_mode_local_prev)
+    {
+        is_wbc_init_ = true;
+        is_gradhess_init_ = true;
+        std::cout << "!!!!!!!!!!CONTACT TRIGGER!!!!!!!!!!";
+        std::cout << "Transition from [" << contactIndicatorToString(contact_mode_local_prev)
+                << "] to [" << contactIndicatorToString(contact_mode_local) << "]" << std::endl;
+    }
+
     if(is_wbc_init_ == true)
     {
+        total_num_constraints = 0;
         total_num_state = constraints_.empty() ? 0 : constraints_[0].A.cols();
         for (const auto& c : constraints_) {total_num_constraints += c.A.rows();}
 
         //--- Initialization
         QP_Dyn_Wbc.InitializeProblemSize(total_num_state, total_num_constraints);
 
-        A_   = Eigen::MatrixXd::Zero(total_num_constraints, total_num_state);
-        lbA_ = Eigen::VectorXd::Zero(total_num_constraints);
-        ubA_ = Eigen::VectorXd::Zero(total_num_constraints);
+        A_const   = Eigen::MatrixXd::Zero(total_num_constraints, total_num_state);
+        lbA_const = Eigen::VectorXd::Zero(total_num_constraints);
+        ubA_const = Eigen::VectorXd::Zero(total_num_constraints);
 
         torque_sol.setZero();
-        contact_wrench_sol.setZero();
 
         is_wbc_init_ = false;
     }
@@ -52,44 +58,36 @@ Eigen::VectorQd DynWBC::computeDynamicWBC()
     int row_idx  = 0;
     for (const auto& c : constraints_) {
         int rows = c.A.rows();
-        A_.block(row_idx, 0, rows, total_num_state) = c.A;
-        lbA_.segment(row_idx , rows)    = c.lbA;
-        ubA_.segment(row_idx , rows)    = c.ubA;
+        A_const.block(row_idx, 0, rows, total_num_state) = c.A;
+        lbA_const.segment(row_idx , rows)    = c.lbA;
+        ubA_const.segment(row_idx , rows)    = c.ubA;
         row_idx  += rows;
     }
 
     checkGradHessSize();
 
     QP_Dyn_Wbc.EnableEqualityCondition(1e-8);
-    QP_Dyn_Wbc.UpdateMinProblem(Hess_, grad_);
+    QP_Dyn_Wbc.UpdateMinProblem(Hess, grad);
     QP_Dyn_Wbc.DeleteSubjectToAx();
-    QP_Dyn_Wbc.UpdateSubjectToAx(A_, lbA_, ubA_);
+    QP_Dyn_Wbc.UpdateSubjectToAx(A_const, lbA_const, ubA_const);
 
-    Eigen::VectorXd F_; F_.setZero(total_num_state);
-    if(QP_Dyn_Wbc.SolveQPoases(200, F_, true))
+    Eigen::VectorXd X_; X_.setZero(total_num_state);
+    if(QP_Dyn_Wbc.SolveQPoases(500, X_, true))
     {
-        torque_sol = F_.head(MODEL_DOF);
-        contact_wrench_sol = F_.tail(12);
-
-        Eigen::MatrixXd S_T = Eigen::MatrixXd::Zero(MODEL_DOF_VIRTUAL, MODEL_DOF);
-        S_T.block(6, 0, MODEL_DOF, MODEL_DOF) = Eigen::MatrixXd::Identity(MODEL_DOF, MODEL_DOF);
-        dataWBC1 << qddot_des_from_ik_eigen.transpose() << std::endl;
-        dataWBC2 << (H_inv_eigen * (S_T * torque_sol + J_c_eigen.transpose() * contact_wrench_sol - G_eigen)).transpose() << std::endl;
-        dataWBC3 << torque_sol.transpose() << std::endl;
-        dataWBC4 << contact_wrench_sol.transpose() << std::endl;
+        torque_sol  = X_.segment(0, MODEL_DOF);
     }
     else
     {
         //--- CONSTRAINTS VIOLATION CHECKER
         if(is_cannot_solve_qp_init_ == true)   
         {
-            Eigen::VectorXd Ax = A_ * F_; 
+            Eigen::VectorXd Ax = A_const * X_; 
 
-            for (int i = 0; i < A_.rows(); ++i)
+            for (int i = 0; i < A_const.rows(); ++i)
             {
                 double val = Ax(i);
-                double l = lbA_(i);
-                double u = ubA_(i);
+                double l = lbA_const(i);
+                double u = ubA_const(i);
 
                 double eps = 1e-5;
 
@@ -102,141 +100,284 @@ Eigen::VectorQd DynWBC::computeDynamicWBC()
                     std::cerr << "[Constraint Violation] Row " << i << ": " << val << " > ubA = " << u << std::endl;
                 }
             }
-            JointLimitChecker();
-            std::cout << "[VIRTUAL] qddot_des_from_ik_: " << qddot_des_from_ik_eigen.segment(0,6).transpose() << std::endl;
-            std::cout << "[LOWER]   qddot_des_from_ik_: " << qddot_des_from_ik_eigen.segment(6,12).transpose() << std::endl;
-            std::cout << "[UPPER]   qddot_des_from_ik_: " << qddot_des_from_ik_eigen.segment(18,21).transpose() << std::endl;
-            
-            std::cout << "[LOWER]   torque_sol: " << torque_sol.segment(0,12).transpose() << std::endl;
-            std::cout << "[UPPER]   torque_sol: " << torque_sol.segment(12,21).transpose() << std::endl;
-
             is_cannot_solve_qp_init_ = false;
         }
 
 
         // std::cout << "Dyn WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
         torque_sol.setZero();
-        contact_wrench_sol.setZero();
     }
+    std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+
+    dataWBC6 << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << std::endl;
+
+    dataWBC1 << torque_sol.transpose() << std::endl;
+    dataWBC2 << (J_task_inv_T["L_Wrist2_Link"] * torque_sol).transpose() << std::endl; 
+    dataWBC3 << F_task["L_Wrist2_Link"].transpose() << std::endl; 
+    dataWBC4 << (J_contact_inv_T * torque_sol).transpose() << std::endl; 
+    dataWBC5 << F_contact.transpose() << std::endl; 
 
     return(torque_sol);
 }
 
-//--- Functions
-void DynWBC::casadiFunctionCall()
-{
-    std::string lib_full_name = library_path + library_name;
-
-    J_v_func_          = casadi::external("J_v_func", lib_full_name);
-    J_vv_func_         = casadi::external("J_vv_func", lib_full_name);
-
-    cineq1_max_func_   = casadi::external("cineq1_max_func", lib_full_name);
-    cineq1_max_v_func_ = casadi::external("cineq1_max_v_func", lib_full_name);
-    cineq2_max_func_   = casadi::external("cineq2_max_func", lib_full_name);
-    cineq2_max_v_func_ = casadi::external("cineq2_max_v_func", lib_full_name);
-    cineq3_max_func_   = casadi::external("cineq3_max_func", lib_full_name);
-    cineq3_max_v_func_ = casadi::external("cineq3_max_v_func", lib_full_name);
-    cineq4_max_func_   = casadi::external("cineq4_max_func", lib_full_name);
-    cineq4_max_v_func_ = casadi::external("cineq4_max_v_func", lib_full_name);
-    cineq5_max_func_   = casadi::external("cineq5_max_func", lib_full_name);
-    cineq5_max_v_func_ = casadi::external("cineq5_max_v_func", lib_full_name);
-    cineq6_max_func_   = casadi::external("cineq6_max_func", lib_full_name);
-    cineq6_max_v_func_ = casadi::external("cineq6_max_v_func", lib_full_name);
-    cineq7_max_func_   = casadi::external("cineq7_max_func", lib_full_name);
-    cineq7_max_v_func_ = casadi::external("cineq7_max_v_func", lib_full_name);
-    cineq8_max_func_   = casadi::external("cineq8_max_func", lib_full_name);
-    cineq8_max_v_func_ = casadi::external("cineq8_max_v_func", lib_full_name);
-
-    cineq1_min_func_   = casadi::external("cineq1_min_func", lib_full_name);
-    cineq1_min_v_func_ = casadi::external("cineq1_min_v_func", lib_full_name);
-    cineq2_min_func_   = casadi::external("cineq2_min_func", lib_full_name);
-    cineq2_min_v_func_ = casadi::external("cineq2_min_v_func", lib_full_name);
-    cineq3_min_func_   = casadi::external("cineq3_min_func", lib_full_name);
-    cineq3_min_v_func_ = casadi::external("cineq3_min_v_func", lib_full_name);
-    cineq4_min_func_   = casadi::external("cineq4_min_func", lib_full_name);
-    cineq4_min_v_func_ = casadi::external("cineq4_min_v_func", lib_full_name);
-    cineq5_min_func_   = casadi::external("cineq5_min_func", lib_full_name);
-    cineq5_min_v_func_ = casadi::external("cineq5_min_v_func", lib_full_name);
-    cineq6_min_func_   = casadi::external("cineq6_min_func", lib_full_name);
-    cineq6_min_v_func_ = casadi::external("cineq6_min_v_func", lib_full_name);
-    cineq7_min_func_   = casadi::external("cineq7_min_func", lib_full_name);
-    cineq7_min_v_func_ = casadi::external("cineq7_min_v_func", lib_full_name);
-    cineq8_min_func_   = casadi::external("cineq8_min_func", lib_full_name);
-    cineq8_min_v_func_ = casadi::external("cineq8_min_v_func", lib_full_name);
-
-    std::cout << "CASADI FUNCTION CALL SUCCESS!" << std::endl;
-}
-
-void DynWBC::setRobotSystemParameters(const double& mu, const double& foot_size, const double& foot_width, const int& contact_dim, 
-                                      const Eigen::VectorQd& torque_lim, const Eigen::VectorQd& q_pos_l_lim, const Eigen::VectorQd& q_pos_h_lim, const Eigen::VectorQd& q_vel_l_lim, const Eigen::VectorQd& q_vel_h_lim, 
-                                      const double& force_z_max, const double& force_z_min)
+void DynWBC::setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_, const double& force_z_max_, const double& force_z_min_, 
+                                      const Eigen::VectorQd& torque_lim_, const Eigen::VectorQd& q_pos_l_lim_, const Eigen::VectorQd& q_pos_h_lim_, const Eigen::VectorQd& q_vel_l_lim_, const Eigen::VectorQd& q_vel_h_lim_)
 {
     //--- Friction, Contact, Torque limit constraints
-    mu_ = mu;
-    foot_size_ = foot_size; 
-    foot_width_ = foot_width; 
-    contact_dim_ = contact_dim;
-    force_z_max_ = force_z_max;
-    force_z_min_ = force_z_min;
+    mu = mu_;
+    foot_size = foot_size_; 
+    foot_width = foot_width_; 
+    force_z_max = force_z_max_;
+    force_z_min = force_z_min_;
 
-    EigenToCasadiDM<Eigen::VectorQd>(torque_lim_, torque_lim, torque_lim.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>(q_pos_l_lim_, q_pos_l_lim, q_pos_l_lim.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>(q_pos_h_lim_, q_pos_h_lim, q_pos_h_lim.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>(q_vel_l_lim_, q_vel_l_lim, q_vel_l_lim.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>(q_vel_h_lim_, q_vel_h_lim, q_vel_h_lim.size(), 1);
+    torque_lim = torque_lim_;
+    q_pos_l_lim = q_pos_l_lim_;
+    q_pos_h_lim = q_pos_h_lim_;
+    q_vel_l_lim = q_vel_l_lim_;
+    q_vel_h_lim = q_vel_h_lim_;
 }
 
-void DynWBC::setWbcWeights(const Eigen::VectorVQd& W_Q, const Eigen::VectorQd& W_torque, const Eigen::VectorXd& W_lambda, const Eigen::VectorQd& W_torque_prev)
+void DynWBC::setWbcWeights(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
+                           const std::map<std::string, Eigen::VectorXd>& W_task_, const Eigen::VectorQd& W_energy_, const Eigen::VectorXd& W_contact_, const Eigen::VectorQd& W_torque_prev_)
 {
-    //--- Cost function
-    EigenToCasadiDM<Eigen::VectorVQd>(W_Q_,      W_Q,      W_Q.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>( W_torque_, W_torque, W_torque.size(), 1);
-    EigenToCasadiDM<Eigen::VectorXd>( W_lambda_, W_lambda, W_lambda.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>( W_torque_prev_, W_torque_prev, W_torque_prev.size(), 1);
+    for (const auto& task_group : task_hierarchy_)
+    {
+        int m = 3 * task_group.size();
+        for (const auto& [name, type] : task_group){ W_task[name] = Eigen::VectorXd::Zero(m);}
+
+        std::set<std::string> visited;
+        for (size_t i = 0; i < task_group.size(); ++i)
+        {
+            const auto& [name, type] = task_group[i];
+
+            if (visited.count(name))
+                continue;
+            visited.insert(name);
+
+            W_task[name] = W_task_.at(name);
+        }
+    }
+
+    W_energy = W_energy_;
+
+    W_contact.setZero(W_contact_.size());
+    W_contact = W_contact_;
+
+    W_torque_prev = W_torque_prev_;
 }
 
-void DynWBC::getRobotStates(const Eigen::MatrixVQVQd& H_inv, 
-                            const Eigen::VectorVQd& G, 
-                            const Eigen::MatrixXd& J_c, 
-                            const Eigen::VectorVQd& qddot_des_from_ik,
-                            const Eigen::VectorQd& q,
-                            const Eigen::VectorQd& qdot)
+void DynWBC::computeTaskImpedance(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
+                                  const std::map<std::string, Eigen::Vector3d>& task_Kp, const std::map<std::string, Eigen::Vector3d>& task_Kv, 
+                                  const std::map<std::string, Eigen::Vector3d>& x_desired, const std::map<std::string, Eigen::Vector3d>& dx_desired, const std::map<std::string, Eigen::Vector3d>& ddx_desired,
+                                  const std::map<std::string, Eigen::Matrix3d>& R_desired, const std::map<std::string, Eigen::Vector3d>& w_desired, const std::map<std::string, Eigen::Vector3d>& dw_desired,
+                                  const std::map<std::string, Eigen::Vector3d>& base_ee_pos, const std::map<std::string, Eigen::Matrix3d>& base_ee_rot,
+                                  const std::map<std::string, Eigen::Vector3d>& base_ee_v, const std::map<std::string, Eigen::Vector3d>& base_ee_w)
 {
-    EigenToCasadiDM<Eigen::MatrixVQVQd>(H_inv_, H_inv, H_inv.rows(), H_inv.cols());
-    EigenToCasadiDM<Eigen::VectorVQd>(G_, G, G.size(), 1);
-    EigenToCasadiDM<Eigen::MatrixXd>(J_c_, J_c, J_c.rows(), J_c.cols());
-    EigenToCasadiDM<Eigen::VectorVQd>(qddot_des_from_ik_,  qddot_des_from_ik,  qddot_des_from_ik.size(), 1);
+    for (const auto& task_group : task_hierarchy_)
+    {
+        int m = 3 * task_group.size();
+        for (const auto& [name, type] : task_group){ F_task[name] = Eigen::VectorXd::Zero(m);}
 
-    H_inv_eigen.setZero(); H_inv_eigen = H_inv;
-    G_eigen.setZero(); G_eigen = G;
-    J_c_eigen.setZero(J_c.rows(), J_c.cols()); J_c_eigen = J_c;
-    qddot_des_from_ik_eigen.setZero(); qddot_des_from_ik_eigen = qddot_des_from_ik;
+        for (size_t i = 0; i < task_group.size(); ++i)
+        {
+            const auto& [name, type] = task_group[i];
 
-    Eigen::VectorQd torque; torque.setZero();
-    Eigen::VectorXd lambda; lambda.setZero(J_c.rows());
-    Eigen::VectorXd lambda_des; lambda_des.setZero(J_c.rows());
-    lambda_des(2) = G(2) / 2.0; 
-    lambda_des(8) = G(2) / 2.0;
-    EigenToCasadiDM<Eigen::VectorQd>(torque_, torque, torque.size(), 1);
-    EigenToCasadiDM<Eigen::VectorXd>(lambda_, lambda, lambda.size(), 1);
-    EigenToCasadiDM<Eigen::VectorXd>(lambda_des_, lambda_des, lambda_des.size(), 1);
+            if (type == TaskType::Position)
+            {
+                Eigen::Vector3d Kp_vec = task_Kp.at(name); 
+                Eigen::Vector3d Kv_vec = task_Kv.at(name);
 
-    EigenToCasadiDM<Eigen::VectorQd>(q_,       q,    q.size(), 1);
-    EigenToCasadiDM<Eigen::VectorQd>(qdot_, qdot, qdot.size(), 1);
+                Eigen::Vector3d pos_err = x_desired.at(name)  - base_ee_pos.at(name);
+                Eigen::Vector3d vel_err = dx_desired.at(name) - base_ee_v.at(name); 
 
-    EigenToCasadiDM<Eigen::VectorQd>(torque_sol_, torque_sol, torque_sol.size(), 1);
+                F_task.at(name).segment<3>(3 * i) = ddx_desired.at(name) + Kp_vec.asDiagonal() * pos_err + Kv_vec.asDiagonal() * vel_err;
+            }
+            else if (type == TaskType::Orientation)
+            {
+                Eigen::Vector3d Kp_vec = task_Kp.at(name);
+                Eigen::Vector3d Kv_vec = task_Kv.at(name);
+                
+                Eigen::Vector3d ori_err = -DyrosMath::getPhi(base_ee_rot.at(name), R_desired.at(name));
+                // Eigen::Vector3d ori_err = -getOrientationError(base_ee_rot.at(name), R_desired.at(name));
+                Eigen::Vector3d vel_err = (w_desired.at(name) - base_ee_w.at(name)); 
+
+                F_task.at(name).segment<3>(3 * i) = dw_desired.at(name) + Kp_vec.asDiagonal() * ori_err + Kv_vec.asDiagonal() * vel_err;
+            }
+            else
+            {
+                ROS_ERROR("Unknown TaskType for link [%s], type value: %d",
+                        name.c_str(), static_cast<int>(type));
+                assert(false && "Unknown TaskType");
+            }
+        }
+    }
 }
 
-void DynWBC::calcCostHess()
+                            
+void DynWBC::computeContactWrench(const ContactIndicator& contactMode, const double& MG_)
 {
-    std::vector<casadi::DM> Hess_dm = J_vv_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, qdot_, qddot_des_from_ik_, torque_, torque_sol_, lambda_, lambda_des_, W_Q_, W_torque_, W_lambda_, W_torque_prev_});
-    Hess_ = CasadiDMVectorToEigen<Eigen::MatrixXd>(Hess_dm);
+    contact_mode_local_prev = contact_mode_local;
+    contact_mode_local = contactMode;
+
+    MG = MG_;
+
+    if(contact_mode_local == ContactIndicator::DoubleSupport)
+    {
+        F_contact.setZero(12);
+        F_gravity.setZero(12);
+        J_contact_inv_T.setZero(12, MODEL_DOF);
+
+        F_gravity(2) = MG / 2.0;
+        F_gravity(8) = MG / 2.0;
+    }
+    else if (contact_mode_local == ContactIndicator::LeftSingleSupport || contact_mode_local == ContactIndicator::RightSingleSupport)
+    {
+        F_contact.setZero(6);
+        F_gravity.setZero(6);
+        J_contact_inv_T.setZero(6, MODEL_DOF);
+
+        F_gravity(2) = MG;
+    }
 }
 
-void DynWBC::calcCostGrad()
+void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
+                            const Eigen::VectorVQd& q_,
+                            const Eigen::VectorVQd& qdot_,
+                            const Eigen::MatrixVVd& Mass_, 
+                            const Eigen::MatrixVVd& Mass_inv_, 
+                            const Eigen::VectorVQd& Grav_, 
+                            const Eigen::MatrixXd& base_contact_Jac_,
+                            const Eigen::MatrixXd& base_contact_Jac_dot_,
+                            const Eigen::MatrixXd& base_contact_lambda_,
+                            const Eigen::MatrixXd& base_contact_Jac_inv_T_,
+                            const Eigen::MatrixVVd& base_contact_N_, 
+                            const std::map<std::string, Eigen::MatrixXd>& base_task_Jac_inv_T_S_T_,
+                            const Eigen::VectorQd& torque_prev_)
 {
-    std::vector<casadi::DM> grad_dm = J_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, qdot_, qddot_des_from_ik_, torque_, torque_sol_, lambda_, lambda_des_, W_Q_, W_torque_, W_lambda_, W_torque_prev_});
-    grad_ = CasadiDMVectorToEigen<Eigen::VectorXd>(grad_dm);
+    //--- Robot States
+    q = q_;
+    qdot = qdot_;
+
+    //--- Contact Consistent Whole-body Dynamics
+    M.setZero(); G.setZero(); A.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF);
+    M = Mass_;
+    M_inv = Mass_inv_;
+    G = base_contact_N_ * Grav_ + base_contact_Jac_.transpose() * base_contact_lambda_ * base_contact_Jac_dot_ * qdot_;
+    A = base_contact_N_.rightCols(MODEL_DOF);
+
+    std::set<std::string> visited;
+
+    //--- Dynamically consistent inverse
+    for (const auto& task_group : task_hierarchy_)
+    {
+        for (const auto& [name, type] : task_group)
+        {
+            if (visited.count(name))
+                continue;
+            visited.insert(name);
+
+            int rows = base_task_Jac_inv_T_S_T_.at(name).rows();
+            int cols = base_task_Jac_inv_T_S_T_.at(name).cols();
+            J_task_inv_T[name] = Eigen::MatrixXd::Zero(rows, cols);
+            J_task_inv_T[name] = base_task_Jac_inv_T_S_T_.at(name);
+        }
+    }
+
+    //--- Relationship btw Contact wrench and Toruqe
+    J_contact_inv_T = (-1.0) * base_contact_Jac_inv_T_.rightCols(MODEL_DOF);
+    F_contact = F_gravity + (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_) - base_contact_Jac_inv_T_ * Grav_;
+
+    //--- Friction cone constraints (https://scaron.info/robotics/wrench-friction-cones.html)
+    Eigen::MatrixXd U_fric_dsp; U_fric_dsp.setZero(32, 12);
+    Eigen::MatrixXd U_fric_ssp; U_fric_ssp.setZero(16, 6);
+    double X = foot_size  / 2.0; 
+    double Y = foot_width / 2.0; 
+    U_fric_ssp << -1,  0,           -mu,   0,   0,  0,
+                  +1,  0,           -mu,   0,   0,  0,
+                   0, -1,           -mu,   0,   0,  0,
+                   0, +1,           -mu,   0,   0,  0,
+                   0,  0,            -Y,  -1,   0,  0,
+                   0,  0,            -Y,  +1,   0,  0,
+                   0,  0,            -X,   0,  -1,  0,
+                   0,  0,            -X,   0,  +1,  0,
+                  -Y, -X, -(X + Y) * mu, -mu, +mu, -1,
+                  +Y, +X, -(X + Y) * mu, +mu, -mu, -1,
+                  +Y, -X, -(X + Y) * mu, +mu, +mu, -1,
+                  +Y, +X, -(X + Y) * mu, +mu, +mu, -1,
+                  +Y, -X, -(X + Y) * mu, +mu, +mu, +1,
+                  +Y, +X, -(X + Y) * mu, +mu, -mu, +1,
+                  -Y, -X, -(X + Y) * mu, -mu, -mu, +1,
+                  -Y, +X, -(X + Y) * mu, -mu, +mu, +1;
+    U_fric_dsp.topLeftCorner(16, 6) = U_fric_ssp;
+    U_fric_dsp.bottomRightCorner(16, 6) = U_fric_ssp;
+
+    if(contact_mode_local == ContactIndicator::DoubleSupport)
+    {
+        J_fric.setZero(32, MODEL_DOF);
+        ubA_fric.setZero(32);
+
+        J_fric = (-1.0) * U_fric_dsp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
+        ubA_fric = U_fric_dsp * (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_ - base_contact_Jac_inv_T_ * Grav_);
+    }
+    else if(contact_mode_local == ContactIndicator::LeftSingleSupport || contact_mode_local == ContactIndicator::RightSingleSupport)
+    {
+        J_fric.setZero(16, MODEL_DOF);
+        ubA_fric.setZero(16);
+
+        J_fric = (-1.0) * U_fric_ssp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
+        ubA_fric = U_fric_ssp * (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_ - base_contact_Jac_inv_T_ * Grav_);
+    }
+
+    //--- Torque command regularization
+    torque_prev = torque_prev_;
+}
+
+void DynWBC::calcCostHess(const std::vector<std::vector<TaskInfo>>& task_hierarchy_)
+{
+    Hess.setZero(MODEL_DOF, MODEL_DOF);
+
+    std::set<std::string> visited;
+    for (const auto& task_group : task_hierarchy_)
+    {
+        for (const auto& [name, type] : task_group)
+        { 
+            if (visited.count(name))
+                continue;
+            visited.insert(name);
+
+            Hess += J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * J_task_inv_T[name]; 
+        }
+    }
+
+    Hess += J_contact_inv_T.transpose() * W_contact.asDiagonal() * J_contact_inv_T; 
+
+    Hess += W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * A);
+
+    Hess += W_torque_prev.asDiagonal();
+}
+
+void DynWBC::calcCostGrad(const std::vector<std::vector<TaskInfo>>& task_hierarchy_)
+{
+    grad.setZero(MODEL_DOF);
+
+    std::set<std::string> visited;
+    for (const auto& task_group : task_hierarchy_)
+    {
+        for (const auto& [name, type] : task_group)
+        { 
+            if (visited.count(name))
+                continue;
+            visited.insert(name);
+
+            grad -= J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * F_task[name]; 
+        }
+    }
+
+    grad -= J_contact_inv_T.transpose() * W_contact.asDiagonal() * F_contact;
+
+    grad -= W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * G);
+
+    grad -= W_torque_prev.asDiagonal() * torque_prev;
 }
 
 void DynWBC::calcEqualityConstraint()
@@ -246,130 +387,42 @@ void DynWBC::calcEqualityConstraint()
 
 void DynWBC::calcInequalityConstraint()
 {
-    //--- (1) CasADi Function Generation
-    std::vector<casadi::DM> cineq1_max_dm = cineq1_max_func_(std::vector<casadi::DM>{lambda_, force_z_max_});
-    std::vector<casadi::DM> cineq1_min_dm = cineq1_min_func_(std::vector<casadi::DM>{lambda_, force_z_min_});
-    std::vector<casadi::DM> cineq2_max_dm = cineq2_max_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq2_min_dm = cineq2_min_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq3_max_dm = cineq3_max_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq3_min_dm = cineq3_min_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq4_max_dm = cineq4_max_func_(std::vector<casadi::DM>{lambda_, foot_width_ / 2.0});
-    std::vector<casadi::DM> cineq4_min_dm = cineq4_min_func_(std::vector<casadi::DM>{lambda_, foot_width_ / 2.0});
-    std::vector<casadi::DM> cineq5_max_dm = cineq5_max_func_(std::vector<casadi::DM>{lambda_, foot_size_  / 2.0});
-    std::vector<casadi::DM> cineq5_min_dm = cineq5_min_func_(std::vector<casadi::DM>{lambda_, foot_size_  / 2.0});
-    
-    std::vector<casadi::DM> cineq1_max_v_dm = cineq1_max_v_func_(std::vector<casadi::DM>{lambda_, force_z_max_});
-    std::vector<casadi::DM> cineq1_min_v_dm = cineq1_min_v_func_(std::vector<casadi::DM>{lambda_, force_z_min_});
-    std::vector<casadi::DM> cineq2_max_v_dm = cineq2_max_v_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq2_min_v_dm = cineq2_min_v_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq3_max_v_dm = cineq3_max_v_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq3_min_v_dm = cineq3_min_v_func_(std::vector<casadi::DM>{lambda_, mu_});
-    std::vector<casadi::DM> cineq4_max_v_dm = cineq4_max_v_func_(std::vector<casadi::DM>{lambda_, foot_width_ / 2.0});
-    std::vector<casadi::DM> cineq4_min_v_dm = cineq4_min_v_func_(std::vector<casadi::DM>{lambda_, foot_width_ / 2.0});
-    std::vector<casadi::DM> cineq5_max_v_dm = cineq5_max_v_func_(std::vector<casadi::DM>{lambda_, foot_size_  / 2.0});
-    std::vector<casadi::DM> cineq5_min_v_dm = cineq5_min_v_func_(std::vector<casadi::DM>{lambda_, foot_size_  / 2.0});
-    
-    std::vector<casadi::DM> cineq6_max_dm = cineq6_max_func_(std::vector<casadi::DM>{torque_, torque_lim_});
-    std::vector<casadi::DM> cineq6_min_dm = cineq6_min_func_(std::vector<casadi::DM>{torque_, torque_lim_});
-    std::vector<casadi::DM> cineq6_max_v_dm = cineq6_max_v_func_(std::vector<casadi::DM>{torque_, torque_lim_});
-    std::vector<casadi::DM> cineq6_min_v_dm = cineq6_min_v_func_(std::vector<casadi::DM>{torque_, torque_lim_});
-    
-    std::vector<casadi::DM> cineq7_max_dm = cineq7_max_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_h_lim_, alpha1, alpha2});
-    std::vector<casadi::DM> cineq7_min_dm = cineq7_min_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_l_lim_, alpha1, alpha2});
-    std::vector<casadi::DM> cineq7_max_v_dm = cineq7_max_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_h_lim_, alpha1, alpha2});
-    std::vector<casadi::DM> cineq7_min_v_dm = cineq7_min_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, q_, qdot_, q_pos_l_lim_, alpha1, alpha2});
-    
-    std::vector<casadi::DM> cineq8_max_dm = cineq8_max_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_h_lim_, alpha3});
-    std::vector<casadi::DM> cineq8_min_dm = cineq8_min_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_l_lim_, alpha3});
-    std::vector<casadi::DM> cineq8_max_v_dm = cineq8_max_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_h_lim_, alpha3});
-    std::vector<casadi::DM> cineq8_min_v_dm = cineq8_min_v_func_(std::vector<casadi::DM>{H_inv_, G_, J_c_, torque_, lambda_, qdot_, q_vel_l_lim_, alpha3});
+    // //--- (1) Torque constraints
+    Eigen::MatrixQQd A_torque; A_torque.setIdentity();
+    Eigen::VectorQd lbA_torque; lbA_torque = (-1.0) * torque_lim;
+    Eigen::VectorQd ubA_torque; ubA_torque = (+1.0) * torque_lim;
+    constraints_.push_back({A_torque, lbA_torque, ubA_torque});   // --- Torque Boundary (Size 33)
 
-    //--- (2) CasADi To Eigen
-    Eigen::MatrixXd A1   = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq1_max_v_dm);
-    Eigen::VectorXd lbA1 = (+1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(cineq1_min_dm);
-    Eigen::VectorXd ubA1 = (-1.0) * CasadiDMVectorToEigen<Eigen::VectorXd>(cineq1_max_dm);
+    // //--- (2) Joint position constraints
+    Eigen::MatrixQQd A_qpos; A_qpos = (M_inv * A).bottomRows(MODEL_DOF);
+    Eigen::VectorQd lbA_qpos; lbA_qpos = alpha1 * alpha2 * (q_pos_l_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
+    Eigen::VectorQd ubA_qpos; ubA_qpos = alpha1 * alpha2 * (q_pos_h_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
+    constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
 
-    Eigen::MatrixXd A2_max = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq2_max_v_dm);
-    Eigen::MatrixXd A2_min = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq2_min_v_dm);
-
-    Eigen::MatrixXd A3_max = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq3_max_v_dm);
-    Eigen::MatrixXd A3_min = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq3_min_v_dm);
-
-    Eigen::MatrixXd A4_max = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq4_max_v_dm);
-    Eigen::MatrixXd A4_min = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq4_min_v_dm);
-
-    Eigen::MatrixXd A5_max = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq5_max_v_dm);
-    Eigen::MatrixXd A5_min = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq5_min_v_dm);
-
-    Eigen::MatrixXd A6 = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_max_v_dm);
-    Eigen::VectorXd lbA6 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_min_dm);
-    Eigen::VectorXd ubA6 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq6_max_dm);
-
-    Eigen::MatrixXd A7 = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_max_v_dm);
-    Eigen::VectorXd lbA7 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_min_dm);
-    Eigen::VectorXd ubA7 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq7_max_dm);
-
-    Eigen::MatrixXd A8 = CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq8_max_v_dm);
-    Eigen::VectorXd lbA8 = (+1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq8_min_dm);
-    Eigen::VectorXd ubA8 = (-1.0) * CasadiDMVectorToEigen<Eigen::MatrixXd>(cineq8_max_dm);
-
-    //--- (3) Stack Constraints 
-    constraints_.push_back({A6, lbA6, ubA6});   // --- Torque Boundary (Size 33)
-
-    constraints_.push_back({A7, lbA7, ubA7});   // --- Joint Pos Boundary (Size 33)
-
-    // constraints_.push_back({A8, lbA8, ubA8});   // --- Joint Vel Boundary (Size 33)
-
-    constraints_.push_back({A1, lbA1, ubA1});   // --- Size 2
-
-    constraints_.push_back({    // --- Size 2
-        A2_max,
-        Eigen::VectorXd::Constant(A2_max.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A2_max.rows())
+    // //--- (3) Friction cone constraints
+    constraints_.push_back({   
+        J_fric,
+        Eigen::VectorXd::Constant(J_fric.rows(), -std::numeric_limits<double>::infinity()),
+        ubA_fric
     });
 
-    constraints_.push_back({    // --- Size 2
-        A2_min,
-        Eigen::VectorXd::Constant(A2_min.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A2_min.rows())
-    });
+    // constraints_.push_back({   
+    //     A_LF_fric_min,
+    //     Eigen::VectorXd::Constant(A_LF_fric_min.rows(), -std::numeric_limits<double>::infinity()),
+    //     Eigen::VectorXd::Zero(A_LF_fric_min.rows())
+    // });
 
-    constraints_.push_back({    // --- Size 2
-        A3_max,
-        Eigen::VectorXd::Constant(A3_max.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A3_max.rows())
-    });
-    constraints_.push_back({    // --- Size 2
-        A3_min,
-        Eigen::VectorXd::Constant(A3_min.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A3_min.rows())
-    });
+    // constraints_.push_back({   
+    //     A_RF_fric_max,
+    //     Eigen::VectorXd::Constant(A_RF_fric_max.rows(), -std::numeric_limits<double>::infinity()),
+    //     Eigen::VectorXd::Zero(A_RF_fric_max.rows())
+    // });
 
-    constraints_.push_back({    // --- Size 2
-        A4_max,
-        Eigen::VectorXd::Constant(A4_max.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A4_max.rows())
-    });
-
-    constraints_.push_back({    // --- Size 2
-        A4_min,
-        Eigen::VectorXd::Constant(A4_min.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A4_min.rows())
-    });
-
-    constraints_.push_back({    // --- Size 2
-        A5_max,
-        Eigen::VectorXd::Constant(A5_max.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A5_max.rows())
-    });
-
-    constraints_.push_back({    // --- Size 2
-        A5_min,
-        Eigen::VectorXd::Constant(A5_min.rows(), -std::numeric_limits<double>::infinity()),
-        Eigen::VectorXd::Zero(A5_min.rows())
-    });
-
-    //--- TOTAL INEQUALITY SIZE: 2 * 9 + 33 * 3 = 117
+    // constraints_.push_back({    
+    //     A_RF_fric_min,
+    //     Eigen::VectorXd::Constant(A_RF_fric_min.rows(), -std::numeric_limits<double>::infinity()),
+    //     Eigen::VectorXd::Zero(A_RF_fric_min.rows())
+    // });
 }
 
 void DynWBC::checkGradHessSize()
@@ -380,112 +433,25 @@ void DynWBC::checkGradHessSize()
         std::cout << "===== DynWBC COST & CONSTRAINTS DIM INFO =====" << std::endl;
         std::cout << "==============================================" << std::endl;
 
-        std::cout << "Hess_ size: " << Hess_.rows() << " x " << Hess_.cols() << std::endl;
-        std::cout << "grad_ size: " << grad_.size() << std::endl;
+        std::cout << "Hess size: " << Hess.rows() << " x " << Hess.cols() << std::endl;
+        std::cout << "grad size: " << grad.size() << std::endl;
         std::cout << std::endl;
 
-        std::cout << "A: " << A_.rows() << " x " << A_.cols() << std::endl;
-        std::cout << "lbA size: " << lbA_.size() << std::endl;
-        std::cout << "ubA size: " << ubA_.size() << std::endl;
+        std::cout << "A: " << A_const.rows() << " x " << A_const.cols() << std::endl;
+        std::cout << "lbA size: " << lbA_const.size() << std::endl;
+        std::cout << "ubA size: " << ubA_const.size() << std::endl;
         std::cout << std::endl;
 
-        // std::cout << setprecision(3) << std::endl;
-        // std::cout << "Hess_: " << Hess_ << std::endl;
-        // std::cout << "grad_: " << grad_.transpose() << std::endl;
-        // std::cout << std::endl;
-
-        // std::cout << "A: " << A_ << std::endl;
-        // std::cout << "lbA: " << lbA_.transpose() << std::endl;
-        // std::cout << "ubA: " << ubA_.transpose() << std::endl;
-        // std::cout << std::endl;
-
-        // std::cout << "==== INPUT CHECK ====" << std::endl;
-        // std::cout << "H_inv_: \n" << H_inv_ << std::endl;
-        // std::cout << "G_: \n" << G_ << std::endl;
-        // std::cout << "J_c_: \n" << J_c_ << std::endl;
-        // std::cout << "qddot_des_from_ik_: \n" << qddot_des_from_ik_ << std::endl;
-        // std::cout << "torque_: \n" << torque_ << std::endl;
-        // std::cout << "lambda_: \n" << lambda_ << std::endl;
+        qpHessGrad << "A_const: " << std::endl;
+        qpHessGrad << A_const << std::endl;
+        qpHessGrad << " " << std::endl;
+        qpHessGrad << "lbA_const: " << std::endl;
+        qpHessGrad << lbA_const.transpose() << std::endl;
+        qpHessGrad << " " << std::endl;
+        qpHessGrad << "ubA_const:  " << std::endl;
+        qpHessGrad << ubA_const.transpose() << std::endl;
+        qpHessGrad << " " << std::endl;
 
         is_gradhess_init_ = false;
-    }
-}
-
-
-//--- Utils
-template <typename EigenType>
-void DynWBC::EigenToCasadiDM(casadi::DM &casadi_dm, const EigenType &eigen_data, int rows, int cols)
-{
-    casadi_dm = casadi::DM::zeros(rows, cols);
-    memcpy(casadi_dm.ptr(), eigen_data.data(), sizeof(double) * rows * cols);
-}
-
-template <typename ReturnType>
-ReturnType DynWBC::CasadiDMVectorToEigen(const std::vector<casadi::DM> &casadi_dm_vector)
-{
-    casadi::DM Matrx = casadi_dm_vector.at(0);
-    casadi::Sparsity SpA = Matrx.get_sparsity();
-
-    std::vector<casadi_int> output_row, output_col;
-    SpA.get_triplet(output_row, output_col);
-    std::vector<double> values = Matrx.get_nonzeros();
-
-    using T = Eigen::Triplet<double>;
-    std::vector<T> TripletList;
-    TripletList.resize(values.size());
-    for(int k = 0; k < values.size(); ++k)
-        TripletList[k] = T(output_row[k], output_col[k], values[k]);
-
-    Eigen::SparseMatrix<double> SpMatrx(Matrx.size1(), Matrx.size2());
-    SpMatrx.setFromTriplets(TripletList.begin(), TripletList.end());
-
-    if constexpr (std::is_same<ReturnType, Eigen::MatrixXd>::value) 
-    {
-        return Eigen::MatrixXd(SpMatrx);
-    } 
-    else if constexpr (std::is_same<ReturnType, Eigen::VectorXd>::value) 
-    {
-        Eigen::MatrixXd temp_mat = Eigen::MatrixXd(SpMatrx);
-        return Eigen::VectorXd(Eigen::Map<Eigen::VectorXd>(temp_mat.data(), temp_mat.cols() * temp_mat.rows()));
-    } 
-    else 
-    {
-        static_assert("Unsupported ReturnType. Use Eigen::MatrixXd or Eigen::VectorXd.");
-    }
-}
-
-void DynWBC::JointLimitChecker()
-{
-    //--- Joint Limit Violation Checker
-    std::vector<int> violated_indices;
-
-    for (int i = 0; i < q_.size1(); ++i)
-    {
-        double qi    = static_cast<double>(q_(i));
-        double q_min = static_cast<double>(q_pos_l_lim_(i));
-        double q_max = static_cast<double>(q_pos_h_lim_(i));
-
-        if (qi < q_min || qi > q_max)
-        {
-            violated_indices.push_back(i);
-            std::cerr << "[JOINT LIMIT VIOLATION] Joint " << i
-                    << " = " << qi
-                    << " (Limit: " << q_min << " ~ " << q_max << ")"
-                    << std::endl;
-        }
-    }
-
-    if (violated_indices.empty())
-    {
-        // std::cout << "[JOINT LIMIT CHECK] All joints are within limits." << std::endl;
-    }
-    else
-    {
-        std::cout << "[JOINT LIMIT CHECK] Violated joints: ";
-        for (int idx : violated_indices)
-        {
-            std::cout << idx << " ";
-        }
-        std::cout << std::endl;
     }
 }

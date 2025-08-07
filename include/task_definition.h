@@ -8,3 +8,9 @@ struct TaskInfo {
     std::string link_name;
     TaskType type;
 };
+
+enum class ContactIndicator {
+    DoubleSupport,
+    LeftSingleSupport,
+    RightSingleSupport
+};

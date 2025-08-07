@@ -10,7 +10,7 @@ tocabi_msgs
 eigen_conversions
 )
 
-find_package(casadi REQUIRED)   # KW add (FOR CASADI)
+# find_package(casadi REQUIRED)   # KW add (FOR CASADI)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -19,8 +19,8 @@ catkin_package(
   # DEPENDS system_lib
 )
 
-set(LIBRARY_DIRS /usr/local/lib)  # KW add (FOR CASADI)
-set(CASADI_INCLUDE_DIR /usr/local/include/casadi) # KW add (FOR CASADI)
+# set(LIBRARY_DIRS /usr/local/lib)  # KW add (FOR CASADI)
+# set(CASADI_INCLUDE_DIR /usr/local/include/casadi) # KW add (FOR CASADI)
 
 ###########
 ## Build ##
@@ -33,7 +33,6 @@ include_directories(
 
 add_library(${PROJECT_NAME}
   src/cc.cpp
-  src/kin_wbc.cpp
   src/dyn_wbc.cpp
   src/utils.cpp
 )
@@ -41,7 +40,7 @@ add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EX
 
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
-  ${LIBRARY_DIRS}/libcasadi.so  # KW add (FOR CASADI)
+  # ${LIBRARY_DIRS}/libcasadi.so  # KW add (FOR CASADI)
 )
 
 install(TARGETS ${PROJECT_NAME}

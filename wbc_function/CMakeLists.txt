@@ -64,3 +64,4 @@ file(GLOB HEADER_FILES_H ${CMAKE_SOURCE_DIR}/include/*.h)
 # add executable files for test
 add_executable(wbc_function_generation src/wbc_function_generation.cpp)
 target_link_libraries(wbc_function_generation ${CASADI_LIBRARIES})
+

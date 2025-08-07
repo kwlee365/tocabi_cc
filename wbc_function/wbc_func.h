@@ -34,7 +34,7 @@ const casadi_int* J_v_func_sparsity_in(casadi_int i);
 const casadi_int* J_v_func_sparsity_out(casadi_int i);
 int J_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
 int J_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define J_v_func_SZ_ARG 13
+#define J_v_func_SZ_ARG 26
 #define J_v_func_SZ_RES 1
 #define J_v_func_SZ_IW 0
 #define J_v_func_SZ_W 0
@@ -55,682 +55,724 @@ const casadi_int* J_vv_func_sparsity_in(casadi_int i);
 const casadi_int* J_vv_func_sparsity_out(casadi_int i);
 int J_vv_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
 int J_vv_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define J_vv_func_SZ_ARG 13
+#define J_vv_func_SZ_ARG 26
 #define J_vv_func_SZ_RES 1
 #define J_vv_func_SZ_IW 0
 #define J_vv_func_SZ_W 0
-int cineq1_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq1_max_func_alloc_mem(void);
-int cineq1_max_func_init_mem(int mem);
-void cineq1_max_func_free_mem(int mem);
-int cineq1_max_func_checkout(void);
-void cineq1_max_func_release(int mem);
-void cineq1_max_func_incref(void);
-void cineq1_max_func_decref(void);
-casadi_int cineq1_max_func_n_in(void);
-casadi_int cineq1_max_func_n_out(void);
-casadi_real cineq1_max_func_default_in(casadi_int i);
-const char* cineq1_max_func_name_in(casadi_int i);
-const char* cineq1_max_func_name_out(casadi_int i);
-const casadi_int* cineq1_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq1_max_func_sparsity_out(casadi_int i);
-int cineq1_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq1_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq1_max_func_SZ_ARG 2
-#define cineq1_max_func_SZ_RES 1
-#define cineq1_max_func_SZ_IW 0
-#define cineq1_max_func_SZ_W 0
-int cineq1_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq1_min_func_alloc_mem(void);
-int cineq1_min_func_init_mem(int mem);
-void cineq1_min_func_free_mem(int mem);
-int cineq1_min_func_checkout(void);
-void cineq1_min_func_release(int mem);
-void cineq1_min_func_incref(void);
-void cineq1_min_func_decref(void);
-casadi_int cineq1_min_func_n_in(void);
-casadi_int cineq1_min_func_n_out(void);
-casadi_real cineq1_min_func_default_in(casadi_int i);
-const char* cineq1_min_func_name_in(casadi_int i);
-const char* cineq1_min_func_name_out(casadi_int i);
-const casadi_int* cineq1_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq1_min_func_sparsity_out(casadi_int i);
-int cineq1_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq1_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq1_min_func_SZ_ARG 2
-#define cineq1_min_func_SZ_RES 1
-#define cineq1_min_func_SZ_IW 0
-#define cineq1_min_func_SZ_W 0
-int cineq2_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq2_max_func_alloc_mem(void);
-int cineq2_max_func_init_mem(int mem);
-void cineq2_max_func_free_mem(int mem);
-int cineq2_max_func_checkout(void);
-void cineq2_max_func_release(int mem);
-void cineq2_max_func_incref(void);
-void cineq2_max_func_decref(void);
-casadi_int cineq2_max_func_n_in(void);
-casadi_int cineq2_max_func_n_out(void);
-casadi_real cineq2_max_func_default_in(casadi_int i);
-const char* cineq2_max_func_name_in(casadi_int i);
-const char* cineq2_max_func_name_out(casadi_int i);
-const casadi_int* cineq2_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq2_max_func_sparsity_out(casadi_int i);
-int cineq2_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq2_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq2_max_func_SZ_ARG 2
-#define cineq2_max_func_SZ_RES 1
-#define cineq2_max_func_SZ_IW 0
-#define cineq2_max_func_SZ_W 0
-int cineq2_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq2_min_func_alloc_mem(void);
-int cineq2_min_func_init_mem(int mem);
-void cineq2_min_func_free_mem(int mem);
-int cineq2_min_func_checkout(void);
-void cineq2_min_func_release(int mem);
-void cineq2_min_func_incref(void);
-void cineq2_min_func_decref(void);
-casadi_int cineq2_min_func_n_in(void);
-casadi_int cineq2_min_func_n_out(void);
-casadi_real cineq2_min_func_default_in(casadi_int i);
-const char* cineq2_min_func_name_in(casadi_int i);
-const char* cineq2_min_func_name_out(casadi_int i);
-const casadi_int* cineq2_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq2_min_func_sparsity_out(casadi_int i);
-int cineq2_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq2_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq2_min_func_SZ_ARG 2
-#define cineq2_min_func_SZ_RES 1
-#define cineq2_min_func_SZ_IW 0
-#define cineq2_min_func_SZ_W 0
-int cineq3_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq3_max_func_alloc_mem(void);
-int cineq3_max_func_init_mem(int mem);
-void cineq3_max_func_free_mem(int mem);
-int cineq3_max_func_checkout(void);
-void cineq3_max_func_release(int mem);
-void cineq3_max_func_incref(void);
-void cineq3_max_func_decref(void);
-casadi_int cineq3_max_func_n_in(void);
-casadi_int cineq3_max_func_n_out(void);
-casadi_real cineq3_max_func_default_in(casadi_int i);
-const char* cineq3_max_func_name_in(casadi_int i);
-const char* cineq3_max_func_name_out(casadi_int i);
-const casadi_int* cineq3_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq3_max_func_sparsity_out(casadi_int i);
-int cineq3_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq3_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq3_max_func_SZ_ARG 2
-#define cineq3_max_func_SZ_RES 1
-#define cineq3_max_func_SZ_IW 0
-#define cineq3_max_func_SZ_W 0
-int cineq3_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq3_min_func_alloc_mem(void);
-int cineq3_min_func_init_mem(int mem);
-void cineq3_min_func_free_mem(int mem);
-int cineq3_min_func_checkout(void);
-void cineq3_min_func_release(int mem);
-void cineq3_min_func_incref(void);
-void cineq3_min_func_decref(void);
-casadi_int cineq3_min_func_n_in(void);
-casadi_int cineq3_min_func_n_out(void);
-casadi_real cineq3_min_func_default_in(casadi_int i);
-const char* cineq3_min_func_name_in(casadi_int i);
-const char* cineq3_min_func_name_out(casadi_int i);
-const casadi_int* cineq3_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq3_min_func_sparsity_out(casadi_int i);
-int cineq3_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq3_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq3_min_func_SZ_ARG 2
-#define cineq3_min_func_SZ_RES 1
-#define cineq3_min_func_SZ_IW 0
-#define cineq3_min_func_SZ_W 0
-int cineq4_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq4_max_func_alloc_mem(void);
-int cineq4_max_func_init_mem(int mem);
-void cineq4_max_func_free_mem(int mem);
-int cineq4_max_func_checkout(void);
-void cineq4_max_func_release(int mem);
-void cineq4_max_func_incref(void);
-void cineq4_max_func_decref(void);
-casadi_int cineq4_max_func_n_in(void);
-casadi_int cineq4_max_func_n_out(void);
-casadi_real cineq4_max_func_default_in(casadi_int i);
-const char* cineq4_max_func_name_in(casadi_int i);
-const char* cineq4_max_func_name_out(casadi_int i);
-const casadi_int* cineq4_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq4_max_func_sparsity_out(casadi_int i);
-int cineq4_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq4_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq4_max_func_SZ_ARG 2
-#define cineq4_max_func_SZ_RES 1
-#define cineq4_max_func_SZ_IW 0
-#define cineq4_max_func_SZ_W 0
-int cineq4_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq4_min_func_alloc_mem(void);
-int cineq4_min_func_init_mem(int mem);
-void cineq4_min_func_free_mem(int mem);
-int cineq4_min_func_checkout(void);
-void cineq4_min_func_release(int mem);
-void cineq4_min_func_incref(void);
-void cineq4_min_func_decref(void);
-casadi_int cineq4_min_func_n_in(void);
-casadi_int cineq4_min_func_n_out(void);
-casadi_real cineq4_min_func_default_in(casadi_int i);
-const char* cineq4_min_func_name_in(casadi_int i);
-const char* cineq4_min_func_name_out(casadi_int i);
-const casadi_int* cineq4_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq4_min_func_sparsity_out(casadi_int i);
-int cineq4_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq4_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq4_min_func_SZ_ARG 2
-#define cineq4_min_func_SZ_RES 1
-#define cineq4_min_func_SZ_IW 0
-#define cineq4_min_func_SZ_W 0
-int cineq5_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq5_max_func_alloc_mem(void);
-int cineq5_max_func_init_mem(int mem);
-void cineq5_max_func_free_mem(int mem);
-int cineq5_max_func_checkout(void);
-void cineq5_max_func_release(int mem);
-void cineq5_max_func_incref(void);
-void cineq5_max_func_decref(void);
-casadi_int cineq5_max_func_n_in(void);
-casadi_int cineq5_max_func_n_out(void);
-casadi_real cineq5_max_func_default_in(casadi_int i);
-const char* cineq5_max_func_name_in(casadi_int i);
-const char* cineq5_max_func_name_out(casadi_int i);
-const casadi_int* cineq5_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq5_max_func_sparsity_out(casadi_int i);
-int cineq5_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq5_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq5_max_func_SZ_ARG 2
-#define cineq5_max_func_SZ_RES 1
-#define cineq5_max_func_SZ_IW 0
-#define cineq5_max_func_SZ_W 0
-int cineq5_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq5_min_func_alloc_mem(void);
-int cineq5_min_func_init_mem(int mem);
-void cineq5_min_func_free_mem(int mem);
-int cineq5_min_func_checkout(void);
-void cineq5_min_func_release(int mem);
-void cineq5_min_func_incref(void);
-void cineq5_min_func_decref(void);
-casadi_int cineq5_min_func_n_in(void);
-casadi_int cineq5_min_func_n_out(void);
-casadi_real cineq5_min_func_default_in(casadi_int i);
-const char* cineq5_min_func_name_in(casadi_int i);
-const char* cineq5_min_func_name_out(casadi_int i);
-const casadi_int* cineq5_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq5_min_func_sparsity_out(casadi_int i);
-int cineq5_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq5_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq5_min_func_SZ_ARG 2
-#define cineq5_min_func_SZ_RES 1
-#define cineq5_min_func_SZ_IW 0
-#define cineq5_min_func_SZ_W 0
-int cineq6_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq6_max_func_alloc_mem(void);
-int cineq6_max_func_init_mem(int mem);
-void cineq6_max_func_free_mem(int mem);
-int cineq6_max_func_checkout(void);
-void cineq6_max_func_release(int mem);
-void cineq6_max_func_incref(void);
-void cineq6_max_func_decref(void);
-casadi_int cineq6_max_func_n_in(void);
-casadi_int cineq6_max_func_n_out(void);
-casadi_real cineq6_max_func_default_in(casadi_int i);
-const char* cineq6_max_func_name_in(casadi_int i);
-const char* cineq6_max_func_name_out(casadi_int i);
-const casadi_int* cineq6_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq6_max_func_sparsity_out(casadi_int i);
-int cineq6_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq6_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq6_max_func_SZ_ARG 2
-#define cineq6_max_func_SZ_RES 1
-#define cineq6_max_func_SZ_IW 0
-#define cineq6_max_func_SZ_W 0
-int cineq6_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq6_min_func_alloc_mem(void);
-int cineq6_min_func_init_mem(int mem);
-void cineq6_min_func_free_mem(int mem);
-int cineq6_min_func_checkout(void);
-void cineq6_min_func_release(int mem);
-void cineq6_min_func_incref(void);
-void cineq6_min_func_decref(void);
-casadi_int cineq6_min_func_n_in(void);
-casadi_int cineq6_min_func_n_out(void);
-casadi_real cineq6_min_func_default_in(casadi_int i);
-const char* cineq6_min_func_name_in(casadi_int i);
-const char* cineq6_min_func_name_out(casadi_int i);
-const casadi_int* cineq6_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq6_min_func_sparsity_out(casadi_int i);
-int cineq6_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq6_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq6_min_func_SZ_ARG 2
-#define cineq6_min_func_SZ_RES 1
-#define cineq6_min_func_SZ_IW 0
-#define cineq6_min_func_SZ_W 0
-int cineq7_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq7_max_func_alloc_mem(void);
-int cineq7_max_func_init_mem(int mem);
-void cineq7_max_func_free_mem(int mem);
-int cineq7_max_func_checkout(void);
-void cineq7_max_func_release(int mem);
-void cineq7_max_func_incref(void);
-void cineq7_max_func_decref(void);
-casadi_int cineq7_max_func_n_in(void);
-casadi_int cineq7_max_func_n_out(void);
-casadi_real cineq7_max_func_default_in(casadi_int i);
-const char* cineq7_max_func_name_in(casadi_int i);
-const char* cineq7_max_func_name_out(casadi_int i);
-const casadi_int* cineq7_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq7_max_func_sparsity_out(casadi_int i);
-int cineq7_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq7_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq7_max_func_SZ_ARG 10
-#define cineq7_max_func_SZ_RES 1
-#define cineq7_max_func_SZ_IW 0
-#define cineq7_max_func_SZ_W 0
-int cineq7_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq7_min_func_alloc_mem(void);
-int cineq7_min_func_init_mem(int mem);
-void cineq7_min_func_free_mem(int mem);
-int cineq7_min_func_checkout(void);
-void cineq7_min_func_release(int mem);
-void cineq7_min_func_incref(void);
-void cineq7_min_func_decref(void);
-casadi_int cineq7_min_func_n_in(void);
-casadi_int cineq7_min_func_n_out(void);
-casadi_real cineq7_min_func_default_in(casadi_int i);
-const char* cineq7_min_func_name_in(casadi_int i);
-const char* cineq7_min_func_name_out(casadi_int i);
-const casadi_int* cineq7_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq7_min_func_sparsity_out(casadi_int i);
-int cineq7_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq7_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq7_min_func_SZ_ARG 10
-#define cineq7_min_func_SZ_RES 1
-#define cineq7_min_func_SZ_IW 0
-#define cineq7_min_func_SZ_W 0
-int cineq8_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq8_max_func_alloc_mem(void);
-int cineq8_max_func_init_mem(int mem);
-void cineq8_max_func_free_mem(int mem);
-int cineq8_max_func_checkout(void);
-void cineq8_max_func_release(int mem);
-void cineq8_max_func_incref(void);
-void cineq8_max_func_decref(void);
-casadi_int cineq8_max_func_n_in(void);
-casadi_int cineq8_max_func_n_out(void);
-casadi_real cineq8_max_func_default_in(casadi_int i);
-const char* cineq8_max_func_name_in(casadi_int i);
-const char* cineq8_max_func_name_out(casadi_int i);
-const casadi_int* cineq8_max_func_sparsity_in(casadi_int i);
-const casadi_int* cineq8_max_func_sparsity_out(casadi_int i);
-int cineq8_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq8_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq8_max_func_SZ_ARG 8
-#define cineq8_max_func_SZ_RES 1
-#define cineq8_max_func_SZ_IW 0
-#define cineq8_max_func_SZ_W 0
-int cineq8_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq8_min_func_alloc_mem(void);
-int cineq8_min_func_init_mem(int mem);
-void cineq8_min_func_free_mem(int mem);
-int cineq8_min_func_checkout(void);
-void cineq8_min_func_release(int mem);
-void cineq8_min_func_incref(void);
-void cineq8_min_func_decref(void);
-casadi_int cineq8_min_func_n_in(void);
-casadi_int cineq8_min_func_n_out(void);
-casadi_real cineq8_min_func_default_in(casadi_int i);
-const char* cineq8_min_func_name_in(casadi_int i);
-const char* cineq8_min_func_name_out(casadi_int i);
-const casadi_int* cineq8_min_func_sparsity_in(casadi_int i);
-const casadi_int* cineq8_min_func_sparsity_out(casadi_int i);
-int cineq8_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq8_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq8_min_func_SZ_ARG 8
-#define cineq8_min_func_SZ_RES 1
-#define cineq8_min_func_SZ_IW 0
-#define cineq8_min_func_SZ_W 0
-int cineq1_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq1_max_v_func_alloc_mem(void);
-int cineq1_max_v_func_init_mem(int mem);
-void cineq1_max_v_func_free_mem(int mem);
-int cineq1_max_v_func_checkout(void);
-void cineq1_max_v_func_release(int mem);
-void cineq1_max_v_func_incref(void);
-void cineq1_max_v_func_decref(void);
-casadi_int cineq1_max_v_func_n_in(void);
-casadi_int cineq1_max_v_func_n_out(void);
-casadi_real cineq1_max_v_func_default_in(casadi_int i);
-const char* cineq1_max_v_func_name_in(casadi_int i);
-const char* cineq1_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq1_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq1_max_v_func_sparsity_out(casadi_int i);
-int cineq1_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq1_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq1_max_v_func_SZ_ARG 2
-#define cineq1_max_v_func_SZ_RES 1
-#define cineq1_max_v_func_SZ_IW 0
-#define cineq1_max_v_func_SZ_W 0
-int cineq1_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq1_min_v_func_alloc_mem(void);
-int cineq1_min_v_func_init_mem(int mem);
-void cineq1_min_v_func_free_mem(int mem);
-int cineq1_min_v_func_checkout(void);
-void cineq1_min_v_func_release(int mem);
-void cineq1_min_v_func_incref(void);
-void cineq1_min_v_func_decref(void);
-casadi_int cineq1_min_v_func_n_in(void);
-casadi_int cineq1_min_v_func_n_out(void);
-casadi_real cineq1_min_v_func_default_in(casadi_int i);
-const char* cineq1_min_v_func_name_in(casadi_int i);
-const char* cineq1_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq1_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq1_min_v_func_sparsity_out(casadi_int i);
-int cineq1_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq1_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq1_min_v_func_SZ_ARG 2
-#define cineq1_min_v_func_SZ_RES 1
-#define cineq1_min_v_func_SZ_IW 0
-#define cineq1_min_v_func_SZ_W 0
-int cineq2_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq2_max_v_func_alloc_mem(void);
-int cineq2_max_v_func_init_mem(int mem);
-void cineq2_max_v_func_free_mem(int mem);
-int cineq2_max_v_func_checkout(void);
-void cineq2_max_v_func_release(int mem);
-void cineq2_max_v_func_incref(void);
-void cineq2_max_v_func_decref(void);
-casadi_int cineq2_max_v_func_n_in(void);
-casadi_int cineq2_max_v_func_n_out(void);
-casadi_real cineq2_max_v_func_default_in(casadi_int i);
-const char* cineq2_max_v_func_name_in(casadi_int i);
-const char* cineq2_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq2_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq2_max_v_func_sparsity_out(casadi_int i);
-int cineq2_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq2_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq2_max_v_func_SZ_ARG 2
-#define cineq2_max_v_func_SZ_RES 1
-#define cineq2_max_v_func_SZ_IW 0
-#define cineq2_max_v_func_SZ_W 0
-int cineq2_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq2_min_v_func_alloc_mem(void);
-int cineq2_min_v_func_init_mem(int mem);
-void cineq2_min_v_func_free_mem(int mem);
-int cineq2_min_v_func_checkout(void);
-void cineq2_min_v_func_release(int mem);
-void cineq2_min_v_func_incref(void);
-void cineq2_min_v_func_decref(void);
-casadi_int cineq2_min_v_func_n_in(void);
-casadi_int cineq2_min_v_func_n_out(void);
-casadi_real cineq2_min_v_func_default_in(casadi_int i);
-const char* cineq2_min_v_func_name_in(casadi_int i);
-const char* cineq2_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq2_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq2_min_v_func_sparsity_out(casadi_int i);
-int cineq2_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq2_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq2_min_v_func_SZ_ARG 2
-#define cineq2_min_v_func_SZ_RES 1
-#define cineq2_min_v_func_SZ_IW 0
-#define cineq2_min_v_func_SZ_W 0
-int cineq3_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq3_max_v_func_alloc_mem(void);
-int cineq3_max_v_func_init_mem(int mem);
-void cineq3_max_v_func_free_mem(int mem);
-int cineq3_max_v_func_checkout(void);
-void cineq3_max_v_func_release(int mem);
-void cineq3_max_v_func_incref(void);
-void cineq3_max_v_func_decref(void);
-casadi_int cineq3_max_v_func_n_in(void);
-casadi_int cineq3_max_v_func_n_out(void);
-casadi_real cineq3_max_v_func_default_in(casadi_int i);
-const char* cineq3_max_v_func_name_in(casadi_int i);
-const char* cineq3_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq3_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq3_max_v_func_sparsity_out(casadi_int i);
-int cineq3_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq3_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq3_max_v_func_SZ_ARG 2
-#define cineq3_max_v_func_SZ_RES 1
-#define cineq3_max_v_func_SZ_IW 0
-#define cineq3_max_v_func_SZ_W 0
-int cineq3_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq3_min_v_func_alloc_mem(void);
-int cineq3_min_v_func_init_mem(int mem);
-void cineq3_min_v_func_free_mem(int mem);
-int cineq3_min_v_func_checkout(void);
-void cineq3_min_v_func_release(int mem);
-void cineq3_min_v_func_incref(void);
-void cineq3_min_v_func_decref(void);
-casadi_int cineq3_min_v_func_n_in(void);
-casadi_int cineq3_min_v_func_n_out(void);
-casadi_real cineq3_min_v_func_default_in(casadi_int i);
-const char* cineq3_min_v_func_name_in(casadi_int i);
-const char* cineq3_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq3_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq3_min_v_func_sparsity_out(casadi_int i);
-int cineq3_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq3_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq3_min_v_func_SZ_ARG 2
-#define cineq3_min_v_func_SZ_RES 1
-#define cineq3_min_v_func_SZ_IW 0
-#define cineq3_min_v_func_SZ_W 0
-int cineq4_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq4_max_v_func_alloc_mem(void);
-int cineq4_max_v_func_init_mem(int mem);
-void cineq4_max_v_func_free_mem(int mem);
-int cineq4_max_v_func_checkout(void);
-void cineq4_max_v_func_release(int mem);
-void cineq4_max_v_func_incref(void);
-void cineq4_max_v_func_decref(void);
-casadi_int cineq4_max_v_func_n_in(void);
-casadi_int cineq4_max_v_func_n_out(void);
-casadi_real cineq4_max_v_func_default_in(casadi_int i);
-const char* cineq4_max_v_func_name_in(casadi_int i);
-const char* cineq4_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq4_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq4_max_v_func_sparsity_out(casadi_int i);
-int cineq4_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq4_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq4_max_v_func_SZ_ARG 2
-#define cineq4_max_v_func_SZ_RES 1
-#define cineq4_max_v_func_SZ_IW 0
-#define cineq4_max_v_func_SZ_W 0
-int cineq4_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq4_min_v_func_alloc_mem(void);
-int cineq4_min_v_func_init_mem(int mem);
-void cineq4_min_v_func_free_mem(int mem);
-int cineq4_min_v_func_checkout(void);
-void cineq4_min_v_func_release(int mem);
-void cineq4_min_v_func_incref(void);
-void cineq4_min_v_func_decref(void);
-casadi_int cineq4_min_v_func_n_in(void);
-casadi_int cineq4_min_v_func_n_out(void);
-casadi_real cineq4_min_v_func_default_in(casadi_int i);
-const char* cineq4_min_v_func_name_in(casadi_int i);
-const char* cineq4_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq4_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq4_min_v_func_sparsity_out(casadi_int i);
-int cineq4_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq4_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq4_min_v_func_SZ_ARG 2
-#define cineq4_min_v_func_SZ_RES 1
-#define cineq4_min_v_func_SZ_IW 0
-#define cineq4_min_v_func_SZ_W 0
-int cineq5_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq5_max_v_func_alloc_mem(void);
-int cineq5_max_v_func_init_mem(int mem);
-void cineq5_max_v_func_free_mem(int mem);
-int cineq5_max_v_func_checkout(void);
-void cineq5_max_v_func_release(int mem);
-void cineq5_max_v_func_incref(void);
-void cineq5_max_v_func_decref(void);
-casadi_int cineq5_max_v_func_n_in(void);
-casadi_int cineq5_max_v_func_n_out(void);
-casadi_real cineq5_max_v_func_default_in(casadi_int i);
-const char* cineq5_max_v_func_name_in(casadi_int i);
-const char* cineq5_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq5_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq5_max_v_func_sparsity_out(casadi_int i);
-int cineq5_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq5_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq5_max_v_func_SZ_ARG 2
-#define cineq5_max_v_func_SZ_RES 1
-#define cineq5_max_v_func_SZ_IW 0
-#define cineq5_max_v_func_SZ_W 0
-int cineq5_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq5_min_v_func_alloc_mem(void);
-int cineq5_min_v_func_init_mem(int mem);
-void cineq5_min_v_func_free_mem(int mem);
-int cineq5_min_v_func_checkout(void);
-void cineq5_min_v_func_release(int mem);
-void cineq5_min_v_func_incref(void);
-void cineq5_min_v_func_decref(void);
-casadi_int cineq5_min_v_func_n_in(void);
-casadi_int cineq5_min_v_func_n_out(void);
-casadi_real cineq5_min_v_func_default_in(casadi_int i);
-const char* cineq5_min_v_func_name_in(casadi_int i);
-const char* cineq5_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq5_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq5_min_v_func_sparsity_out(casadi_int i);
-int cineq5_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq5_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq5_min_v_func_SZ_ARG 2
-#define cineq5_min_v_func_SZ_RES 1
-#define cineq5_min_v_func_SZ_IW 0
-#define cineq5_min_v_func_SZ_W 0
-int cineq6_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq6_max_v_func_alloc_mem(void);
-int cineq6_max_v_func_init_mem(int mem);
-void cineq6_max_v_func_free_mem(int mem);
-int cineq6_max_v_func_checkout(void);
-void cineq6_max_v_func_release(int mem);
-void cineq6_max_v_func_incref(void);
-void cineq6_max_v_func_decref(void);
-casadi_int cineq6_max_v_func_n_in(void);
-casadi_int cineq6_max_v_func_n_out(void);
-casadi_real cineq6_max_v_func_default_in(casadi_int i);
-const char* cineq6_max_v_func_name_in(casadi_int i);
-const char* cineq6_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq6_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq6_max_v_func_sparsity_out(casadi_int i);
-int cineq6_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq6_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq6_max_v_func_SZ_ARG 2
-#define cineq6_max_v_func_SZ_RES 1
-#define cineq6_max_v_func_SZ_IW 0
-#define cineq6_max_v_func_SZ_W 0
-int cineq6_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq6_min_v_func_alloc_mem(void);
-int cineq6_min_v_func_init_mem(int mem);
-void cineq6_min_v_func_free_mem(int mem);
-int cineq6_min_v_func_checkout(void);
-void cineq6_min_v_func_release(int mem);
-void cineq6_min_v_func_incref(void);
-void cineq6_min_v_func_decref(void);
-casadi_int cineq6_min_v_func_n_in(void);
-casadi_int cineq6_min_v_func_n_out(void);
-casadi_real cineq6_min_v_func_default_in(casadi_int i);
-const char* cineq6_min_v_func_name_in(casadi_int i);
-const char* cineq6_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq6_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq6_min_v_func_sparsity_out(casadi_int i);
-int cineq6_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq6_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq6_min_v_func_SZ_ARG 2
-#define cineq6_min_v_func_SZ_RES 1
-#define cineq6_min_v_func_SZ_IW 0
-#define cineq6_min_v_func_SZ_W 0
-int cineq7_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq7_max_v_func_alloc_mem(void);
-int cineq7_max_v_func_init_mem(int mem);
-void cineq7_max_v_func_free_mem(int mem);
-int cineq7_max_v_func_checkout(void);
-void cineq7_max_v_func_release(int mem);
-void cineq7_max_v_func_incref(void);
-void cineq7_max_v_func_decref(void);
-casadi_int cineq7_max_v_func_n_in(void);
-casadi_int cineq7_max_v_func_n_out(void);
-casadi_real cineq7_max_v_func_default_in(casadi_int i);
-const char* cineq7_max_v_func_name_in(casadi_int i);
-const char* cineq7_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq7_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq7_max_v_func_sparsity_out(casadi_int i);
-int cineq7_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq7_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq7_max_v_func_SZ_ARG 10
-#define cineq7_max_v_func_SZ_RES 1
-#define cineq7_max_v_func_SZ_IW 0
-#define cineq7_max_v_func_SZ_W 0
-int cineq7_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq7_min_v_func_alloc_mem(void);
-int cineq7_min_v_func_init_mem(int mem);
-void cineq7_min_v_func_free_mem(int mem);
-int cineq7_min_v_func_checkout(void);
-void cineq7_min_v_func_release(int mem);
-void cineq7_min_v_func_incref(void);
-void cineq7_min_v_func_decref(void);
-casadi_int cineq7_min_v_func_n_in(void);
-casadi_int cineq7_min_v_func_n_out(void);
-casadi_real cineq7_min_v_func_default_in(casadi_int i);
-const char* cineq7_min_v_func_name_in(casadi_int i);
-const char* cineq7_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq7_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq7_min_v_func_sparsity_out(casadi_int i);
-int cineq7_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq7_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq7_min_v_func_SZ_ARG 10
-#define cineq7_min_v_func_SZ_RES 1
-#define cineq7_min_v_func_SZ_IW 0
-#define cineq7_min_v_func_SZ_W 0
-int cineq8_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq8_max_v_func_alloc_mem(void);
-int cineq8_max_v_func_init_mem(int mem);
-void cineq8_max_v_func_free_mem(int mem);
-int cineq8_max_v_func_checkout(void);
-void cineq8_max_v_func_release(int mem);
-void cineq8_max_v_func_incref(void);
-void cineq8_max_v_func_decref(void);
-casadi_int cineq8_max_v_func_n_in(void);
-casadi_int cineq8_max_v_func_n_out(void);
-casadi_real cineq8_max_v_func_default_in(casadi_int i);
-const char* cineq8_max_v_func_name_in(casadi_int i);
-const char* cineq8_max_v_func_name_out(casadi_int i);
-const casadi_int* cineq8_max_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq8_max_v_func_sparsity_out(casadi_int i);
-int cineq8_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq8_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq8_max_v_func_SZ_ARG 8
-#define cineq8_max_v_func_SZ_RES 1
-#define cineq8_max_v_func_SZ_IW 0
-#define cineq8_max_v_func_SZ_W 0
-int cineq8_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
-int cineq8_min_v_func_alloc_mem(void);
-int cineq8_min_v_func_init_mem(int mem);
-void cineq8_min_v_func_free_mem(int mem);
-int cineq8_min_v_func_checkout(void);
-void cineq8_min_v_func_release(int mem);
-void cineq8_min_v_func_incref(void);
-void cineq8_min_v_func_decref(void);
-casadi_int cineq8_min_v_func_n_in(void);
-casadi_int cineq8_min_v_func_n_out(void);
-casadi_real cineq8_min_v_func_default_in(casadi_int i);
-const char* cineq8_min_v_func_name_in(casadi_int i);
-const char* cineq8_min_v_func_name_out(casadi_int i);
-const casadi_int* cineq8_min_v_func_sparsity_in(casadi_int i);
-const casadi_int* cineq8_min_v_func_sparsity_out(casadi_int i);
-int cineq8_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-int cineq8_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
-#define cineq8_min_v_func_SZ_ARG 8
-#define cineq8_min_v_func_SZ_RES 1
-#define cineq8_min_v_func_SZ_IW 0
-#define cineq8_min_v_func_SZ_W 0
+int ceq_wb_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int ceq_wb_func_alloc_mem(void);
+int ceq_wb_func_init_mem(int mem);
+void ceq_wb_func_free_mem(int mem);
+int ceq_wb_func_checkout(void);
+void ceq_wb_func_release(int mem);
+void ceq_wb_func_incref(void);
+void ceq_wb_func_decref(void);
+casadi_int ceq_wb_func_n_in(void);
+casadi_int ceq_wb_func_n_out(void);
+casadi_real ceq_wb_func_default_in(casadi_int i);
+const char* ceq_wb_func_name_in(casadi_int i);
+const char* ceq_wb_func_name_out(casadi_int i);
+const casadi_int* ceq_wb_func_sparsity_in(casadi_int i);
+const casadi_int* ceq_wb_func_sparsity_out(casadi_int i);
+int ceq_wb_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int ceq_wb_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define ceq_wb_func_SZ_ARG 18
+#define ceq_wb_func_SZ_RES 1
+#define ceq_wb_func_SZ_IW 0
+#define ceq_wb_func_SZ_W 0
+int ceq_wb_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int ceq_wb_v_func_alloc_mem(void);
+int ceq_wb_v_func_init_mem(int mem);
+void ceq_wb_v_func_free_mem(int mem);
+int ceq_wb_v_func_checkout(void);
+void ceq_wb_v_func_release(int mem);
+void ceq_wb_v_func_incref(void);
+void ceq_wb_v_func_decref(void);
+casadi_int ceq_wb_v_func_n_in(void);
+casadi_int ceq_wb_v_func_n_out(void);
+casadi_real ceq_wb_v_func_default_in(casadi_int i);
+const char* ceq_wb_v_func_name_in(casadi_int i);
+const char* ceq_wb_v_func_name_out(casadi_int i);
+const casadi_int* ceq_wb_v_func_sparsity_in(casadi_int i);
+const casadi_int* ceq_wb_v_func_sparsity_out(casadi_int i);
+int ceq_wb_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int ceq_wb_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define ceq_wb_v_func_SZ_ARG 18
+#define ceq_wb_v_func_SZ_RES 1
+#define ceq_wb_v_func_SZ_IW 0
+#define ceq_wb_v_func_SZ_W 0
+int ceq_cc_leftfoot_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int ceq_cc_leftfoot_func_alloc_mem(void);
+int ceq_cc_leftfoot_func_init_mem(int mem);
+void ceq_cc_leftfoot_func_free_mem(int mem);
+int ceq_cc_leftfoot_func_checkout(void);
+void ceq_cc_leftfoot_func_release(int mem);
+void ceq_cc_leftfoot_func_incref(void);
+void ceq_cc_leftfoot_func_decref(void);
+casadi_int ceq_cc_leftfoot_func_n_in(void);
+casadi_int ceq_cc_leftfoot_func_n_out(void);
+casadi_real ceq_cc_leftfoot_func_default_in(casadi_int i);
+const char* ceq_cc_leftfoot_func_name_in(casadi_int i);
+const char* ceq_cc_leftfoot_func_name_out(casadi_int i);
+const casadi_int* ceq_cc_leftfoot_func_sparsity_in(casadi_int i);
+const casadi_int* ceq_cc_leftfoot_func_sparsity_out(casadi_int i);
+int ceq_cc_leftfoot_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int ceq_cc_leftfoot_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define ceq_cc_leftfoot_func_SZ_ARG 4
+#define ceq_cc_leftfoot_func_SZ_RES 1
+#define ceq_cc_leftfoot_func_SZ_IW 0
+#define ceq_cc_leftfoot_func_SZ_W 0
+int ceq_cc_leftfoot_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int ceq_cc_leftfoot_v_func_alloc_mem(void);
+int ceq_cc_leftfoot_v_func_init_mem(int mem);
+void ceq_cc_leftfoot_v_func_free_mem(int mem);
+int ceq_cc_leftfoot_v_func_checkout(void);
+void ceq_cc_leftfoot_v_func_release(int mem);
+void ceq_cc_leftfoot_v_func_incref(void);
+void ceq_cc_leftfoot_v_func_decref(void);
+casadi_int ceq_cc_leftfoot_v_func_n_in(void);
+casadi_int ceq_cc_leftfoot_v_func_n_out(void);
+casadi_real ceq_cc_leftfoot_v_func_default_in(casadi_int i);
+const char* ceq_cc_leftfoot_v_func_name_in(casadi_int i);
+const char* ceq_cc_leftfoot_v_func_name_out(casadi_int i);
+const casadi_int* ceq_cc_leftfoot_v_func_sparsity_in(casadi_int i);
+const casadi_int* ceq_cc_leftfoot_v_func_sparsity_out(casadi_int i);
+int ceq_cc_leftfoot_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int ceq_cc_leftfoot_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define ceq_cc_leftfoot_v_func_SZ_ARG 4
+#define ceq_cc_leftfoot_v_func_SZ_RES 1
+#define ceq_cc_leftfoot_v_func_SZ_IW 0
+#define ceq_cc_leftfoot_v_func_SZ_W 0
+int ceq_cc_rightfoot_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int ceq_cc_rightfoot_func_alloc_mem(void);
+int ceq_cc_rightfoot_func_init_mem(int mem);
+void ceq_cc_rightfoot_func_free_mem(int mem);
+int ceq_cc_rightfoot_func_checkout(void);
+void ceq_cc_rightfoot_func_release(int mem);
+void ceq_cc_rightfoot_func_incref(void);
+void ceq_cc_rightfoot_func_decref(void);
+casadi_int ceq_cc_rightfoot_func_n_in(void);
+casadi_int ceq_cc_rightfoot_func_n_out(void);
+casadi_real ceq_cc_rightfoot_func_default_in(casadi_int i);
+const char* ceq_cc_rightfoot_func_name_in(casadi_int i);
+const char* ceq_cc_rightfoot_func_name_out(casadi_int i);
+const casadi_int* ceq_cc_rightfoot_func_sparsity_in(casadi_int i);
+const casadi_int* ceq_cc_rightfoot_func_sparsity_out(casadi_int i);
+int ceq_cc_rightfoot_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int ceq_cc_rightfoot_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define ceq_cc_rightfoot_func_SZ_ARG 4
+#define ceq_cc_rightfoot_func_SZ_RES 1
+#define ceq_cc_rightfoot_func_SZ_IW 0
+#define ceq_cc_rightfoot_func_SZ_W 0
+int ceq_cc_rightfoot_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int ceq_cc_rightfoot_v_func_alloc_mem(void);
+int ceq_cc_rightfoot_v_func_init_mem(int mem);
+void ceq_cc_rightfoot_v_func_free_mem(int mem);
+int ceq_cc_rightfoot_v_func_checkout(void);
+void ceq_cc_rightfoot_v_func_release(int mem);
+void ceq_cc_rightfoot_v_func_incref(void);
+void ceq_cc_rightfoot_v_func_decref(void);
+casadi_int ceq_cc_rightfoot_v_func_n_in(void);
+casadi_int ceq_cc_rightfoot_v_func_n_out(void);
+casadi_real ceq_cc_rightfoot_v_func_default_in(casadi_int i);
+const char* ceq_cc_rightfoot_v_func_name_in(casadi_int i);
+const char* ceq_cc_rightfoot_v_func_name_out(casadi_int i);
+const casadi_int* ceq_cc_rightfoot_v_func_sparsity_in(casadi_int i);
+const casadi_int* ceq_cc_rightfoot_v_func_sparsity_out(casadi_int i);
+int ceq_cc_rightfoot_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int ceq_cc_rightfoot_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define ceq_cc_rightfoot_v_func_SZ_ARG 4
+#define ceq_cc_rightfoot_v_func_SZ_RES 1
+#define ceq_cc_rightfoot_v_func_SZ_IW 0
+#define ceq_cc_rightfoot_v_func_SZ_W 0
+int cineq_torque_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_torque_max_func_alloc_mem(void);
+int cineq_torque_max_func_init_mem(int mem);
+void cineq_torque_max_func_free_mem(int mem);
+int cineq_torque_max_func_checkout(void);
+void cineq_torque_max_func_release(int mem);
+void cineq_torque_max_func_incref(void);
+void cineq_torque_max_func_decref(void);
+casadi_int cineq_torque_max_func_n_in(void);
+casadi_int cineq_torque_max_func_n_out(void);
+casadi_real cineq_torque_max_func_default_in(casadi_int i);
+const char* cineq_torque_max_func_name_in(casadi_int i);
+const char* cineq_torque_max_func_name_out(casadi_int i);
+const casadi_int* cineq_torque_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_torque_max_func_sparsity_out(casadi_int i);
+int cineq_torque_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_torque_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_torque_max_func_SZ_ARG 2
+#define cineq_torque_max_func_SZ_RES 1
+#define cineq_torque_max_func_SZ_IW 0
+#define cineq_torque_max_func_SZ_W 0
+int cineq_torque_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_torque_min_func_alloc_mem(void);
+int cineq_torque_min_func_init_mem(int mem);
+void cineq_torque_min_func_free_mem(int mem);
+int cineq_torque_min_func_checkout(void);
+void cineq_torque_min_func_release(int mem);
+void cineq_torque_min_func_incref(void);
+void cineq_torque_min_func_decref(void);
+casadi_int cineq_torque_min_func_n_in(void);
+casadi_int cineq_torque_min_func_n_out(void);
+casadi_real cineq_torque_min_func_default_in(casadi_int i);
+const char* cineq_torque_min_func_name_in(casadi_int i);
+const char* cineq_torque_min_func_name_out(casadi_int i);
+const casadi_int* cineq_torque_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_torque_min_func_sparsity_out(casadi_int i);
+int cineq_torque_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_torque_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_torque_min_func_SZ_ARG 2
+#define cineq_torque_min_func_SZ_RES 1
+#define cineq_torque_min_func_SZ_IW 0
+#define cineq_torque_min_func_SZ_W 0
+int cineq_torque_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_torque_max_v_func_alloc_mem(void);
+int cineq_torque_max_v_func_init_mem(int mem);
+void cineq_torque_max_v_func_free_mem(int mem);
+int cineq_torque_max_v_func_checkout(void);
+void cineq_torque_max_v_func_release(int mem);
+void cineq_torque_max_v_func_incref(void);
+void cineq_torque_max_v_func_decref(void);
+casadi_int cineq_torque_max_v_func_n_in(void);
+casadi_int cineq_torque_max_v_func_n_out(void);
+casadi_real cineq_torque_max_v_func_default_in(casadi_int i);
+const char* cineq_torque_max_v_func_name_in(casadi_int i);
+const char* cineq_torque_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_torque_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_torque_max_v_func_sparsity_out(casadi_int i);
+int cineq_torque_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_torque_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_torque_max_v_func_SZ_ARG 2
+#define cineq_torque_max_v_func_SZ_RES 1
+#define cineq_torque_max_v_func_SZ_IW 0
+#define cineq_torque_max_v_func_SZ_W 0
+int cineq_torque_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_torque_min_v_func_alloc_mem(void);
+int cineq_torque_min_v_func_init_mem(int mem);
+void cineq_torque_min_v_func_free_mem(int mem);
+int cineq_torque_min_v_func_checkout(void);
+void cineq_torque_min_v_func_release(int mem);
+void cineq_torque_min_v_func_incref(void);
+void cineq_torque_min_v_func_decref(void);
+casadi_int cineq_torque_min_v_func_n_in(void);
+casadi_int cineq_torque_min_v_func_n_out(void);
+casadi_real cineq_torque_min_v_func_default_in(casadi_int i);
+const char* cineq_torque_min_v_func_name_in(casadi_int i);
+const char* cineq_torque_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_torque_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_torque_min_v_func_sparsity_out(casadi_int i);
+int cineq_torque_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_torque_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_torque_min_v_func_SZ_ARG 2
+#define cineq_torque_min_v_func_SZ_RES 1
+#define cineq_torque_min_v_func_SZ_IW 0
+#define cineq_torque_min_v_func_SZ_W 0
+int cineq_qpos_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qpos_max_func_alloc_mem(void);
+int cineq_qpos_max_func_init_mem(int mem);
+void cineq_qpos_max_func_free_mem(int mem);
+int cineq_qpos_max_func_checkout(void);
+void cineq_qpos_max_func_release(int mem);
+void cineq_qpos_max_func_incref(void);
+void cineq_qpos_max_func_decref(void);
+casadi_int cineq_qpos_max_func_n_in(void);
+casadi_int cineq_qpos_max_func_n_out(void);
+casadi_real cineq_qpos_max_func_default_in(casadi_int i);
+const char* cineq_qpos_max_func_name_in(casadi_int i);
+const char* cineq_qpos_max_func_name_out(casadi_int i);
+const casadi_int* cineq_qpos_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qpos_max_func_sparsity_out(casadi_int i);
+int cineq_qpos_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qpos_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qpos_max_func_SZ_ARG 6
+#define cineq_qpos_max_func_SZ_RES 1
+#define cineq_qpos_max_func_SZ_IW 0
+#define cineq_qpos_max_func_SZ_W 0
+int cineq_qpos_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qpos_min_func_alloc_mem(void);
+int cineq_qpos_min_func_init_mem(int mem);
+void cineq_qpos_min_func_free_mem(int mem);
+int cineq_qpos_min_func_checkout(void);
+void cineq_qpos_min_func_release(int mem);
+void cineq_qpos_min_func_incref(void);
+void cineq_qpos_min_func_decref(void);
+casadi_int cineq_qpos_min_func_n_in(void);
+casadi_int cineq_qpos_min_func_n_out(void);
+casadi_real cineq_qpos_min_func_default_in(casadi_int i);
+const char* cineq_qpos_min_func_name_in(casadi_int i);
+const char* cineq_qpos_min_func_name_out(casadi_int i);
+const casadi_int* cineq_qpos_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qpos_min_func_sparsity_out(casadi_int i);
+int cineq_qpos_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qpos_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qpos_min_func_SZ_ARG 6
+#define cineq_qpos_min_func_SZ_RES 1
+#define cineq_qpos_min_func_SZ_IW 0
+#define cineq_qpos_min_func_SZ_W 0
+int cineq_qpos_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qpos_max_v_func_alloc_mem(void);
+int cineq_qpos_max_v_func_init_mem(int mem);
+void cineq_qpos_max_v_func_free_mem(int mem);
+int cineq_qpos_max_v_func_checkout(void);
+void cineq_qpos_max_v_func_release(int mem);
+void cineq_qpos_max_v_func_incref(void);
+void cineq_qpos_max_v_func_decref(void);
+casadi_int cineq_qpos_max_v_func_n_in(void);
+casadi_int cineq_qpos_max_v_func_n_out(void);
+casadi_real cineq_qpos_max_v_func_default_in(casadi_int i);
+const char* cineq_qpos_max_v_func_name_in(casadi_int i);
+const char* cineq_qpos_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_qpos_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qpos_max_v_func_sparsity_out(casadi_int i);
+int cineq_qpos_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qpos_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qpos_max_v_func_SZ_ARG 6
+#define cineq_qpos_max_v_func_SZ_RES 1
+#define cineq_qpos_max_v_func_SZ_IW 0
+#define cineq_qpos_max_v_func_SZ_W 0
+int cineq_qpos_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qpos_min_v_func_alloc_mem(void);
+int cineq_qpos_min_v_func_init_mem(int mem);
+void cineq_qpos_min_v_func_free_mem(int mem);
+int cineq_qpos_min_v_func_checkout(void);
+void cineq_qpos_min_v_func_release(int mem);
+void cineq_qpos_min_v_func_incref(void);
+void cineq_qpos_min_v_func_decref(void);
+casadi_int cineq_qpos_min_v_func_n_in(void);
+casadi_int cineq_qpos_min_v_func_n_out(void);
+casadi_real cineq_qpos_min_v_func_default_in(casadi_int i);
+const char* cineq_qpos_min_v_func_name_in(casadi_int i);
+const char* cineq_qpos_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_qpos_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qpos_min_v_func_sparsity_out(casadi_int i);
+int cineq_qpos_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qpos_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qpos_min_v_func_SZ_ARG 6
+#define cineq_qpos_min_v_func_SZ_RES 1
+#define cineq_qpos_min_v_func_SZ_IW 0
+#define cineq_qpos_min_v_func_SZ_W 0
+int cineq_qvel_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qvel_max_func_alloc_mem(void);
+int cineq_qvel_max_func_init_mem(int mem);
+void cineq_qvel_max_func_free_mem(int mem);
+int cineq_qvel_max_func_checkout(void);
+void cineq_qvel_max_func_release(int mem);
+void cineq_qvel_max_func_incref(void);
+void cineq_qvel_max_func_decref(void);
+casadi_int cineq_qvel_max_func_n_in(void);
+casadi_int cineq_qvel_max_func_n_out(void);
+casadi_real cineq_qvel_max_func_default_in(casadi_int i);
+const char* cineq_qvel_max_func_name_in(casadi_int i);
+const char* cineq_qvel_max_func_name_out(casadi_int i);
+const casadi_int* cineq_qvel_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qvel_max_func_sparsity_out(casadi_int i);
+int cineq_qvel_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qvel_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qvel_max_func_SZ_ARG 4
+#define cineq_qvel_max_func_SZ_RES 1
+#define cineq_qvel_max_func_SZ_IW 0
+#define cineq_qvel_max_func_SZ_W 0
+int cineq_qvel_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qvel_min_func_alloc_mem(void);
+int cineq_qvel_min_func_init_mem(int mem);
+void cineq_qvel_min_func_free_mem(int mem);
+int cineq_qvel_min_func_checkout(void);
+void cineq_qvel_min_func_release(int mem);
+void cineq_qvel_min_func_incref(void);
+void cineq_qvel_min_func_decref(void);
+casadi_int cineq_qvel_min_func_n_in(void);
+casadi_int cineq_qvel_min_func_n_out(void);
+casadi_real cineq_qvel_min_func_default_in(casadi_int i);
+const char* cineq_qvel_min_func_name_in(casadi_int i);
+const char* cineq_qvel_min_func_name_out(casadi_int i);
+const casadi_int* cineq_qvel_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qvel_min_func_sparsity_out(casadi_int i);
+int cineq_qvel_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qvel_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qvel_min_func_SZ_ARG 4
+#define cineq_qvel_min_func_SZ_RES 1
+#define cineq_qvel_min_func_SZ_IW 0
+#define cineq_qvel_min_func_SZ_W 0
+int cineq_qvel_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qvel_max_v_func_alloc_mem(void);
+int cineq_qvel_max_v_func_init_mem(int mem);
+void cineq_qvel_max_v_func_free_mem(int mem);
+int cineq_qvel_max_v_func_checkout(void);
+void cineq_qvel_max_v_func_release(int mem);
+void cineq_qvel_max_v_func_incref(void);
+void cineq_qvel_max_v_func_decref(void);
+casadi_int cineq_qvel_max_v_func_n_in(void);
+casadi_int cineq_qvel_max_v_func_n_out(void);
+casadi_real cineq_qvel_max_v_func_default_in(casadi_int i);
+const char* cineq_qvel_max_v_func_name_in(casadi_int i);
+const char* cineq_qvel_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_qvel_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qvel_max_v_func_sparsity_out(casadi_int i);
+int cineq_qvel_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qvel_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qvel_max_v_func_SZ_ARG 4
+#define cineq_qvel_max_v_func_SZ_RES 1
+#define cineq_qvel_max_v_func_SZ_IW 0
+#define cineq_qvel_max_v_func_SZ_W 0
+int cineq_qvel_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_qvel_min_v_func_alloc_mem(void);
+int cineq_qvel_min_v_func_init_mem(int mem);
+void cineq_qvel_min_v_func_free_mem(int mem);
+int cineq_qvel_min_v_func_checkout(void);
+void cineq_qvel_min_v_func_release(int mem);
+void cineq_qvel_min_v_func_incref(void);
+void cineq_qvel_min_v_func_decref(void);
+casadi_int cineq_qvel_min_v_func_n_in(void);
+casadi_int cineq_qvel_min_v_func_n_out(void);
+casadi_real cineq_qvel_min_v_func_default_in(casadi_int i);
+const char* cineq_qvel_min_v_func_name_in(casadi_int i);
+const char* cineq_qvel_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_qvel_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_qvel_min_v_func_sparsity_out(casadi_int i);
+int cineq_qvel_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_qvel_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_qvel_min_v_func_SZ_ARG 4
+#define cineq_qvel_min_v_func_SZ_RES 1
+#define cineq_qvel_min_v_func_SZ_IW 0
+#define cineq_qvel_min_v_func_SZ_W 0
+int cineq_unilateral_leftfoot_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_leftfoot_max_func_alloc_mem(void);
+int cineq_unilateral_leftfoot_max_func_init_mem(int mem);
+void cineq_unilateral_leftfoot_max_func_free_mem(int mem);
+int cineq_unilateral_leftfoot_max_func_checkout(void);
+void cineq_unilateral_leftfoot_max_func_release(int mem);
+void cineq_unilateral_leftfoot_max_func_incref(void);
+void cineq_unilateral_leftfoot_max_func_decref(void);
+casadi_int cineq_unilateral_leftfoot_max_func_n_in(void);
+casadi_int cineq_unilateral_leftfoot_max_func_n_out(void);
+casadi_real cineq_unilateral_leftfoot_max_func_default_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_max_func_name_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_max_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_max_func_sparsity_out(casadi_int i);
+int cineq_unilateral_leftfoot_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_leftfoot_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_leftfoot_max_func_SZ_ARG 2
+#define cineq_unilateral_leftfoot_max_func_SZ_RES 1
+#define cineq_unilateral_leftfoot_max_func_SZ_IW 0
+#define cineq_unilateral_leftfoot_max_func_SZ_W 0
+int cineq_unilateral_leftfoot_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_leftfoot_min_func_alloc_mem(void);
+int cineq_unilateral_leftfoot_min_func_init_mem(int mem);
+void cineq_unilateral_leftfoot_min_func_free_mem(int mem);
+int cineq_unilateral_leftfoot_min_func_checkout(void);
+void cineq_unilateral_leftfoot_min_func_release(int mem);
+void cineq_unilateral_leftfoot_min_func_incref(void);
+void cineq_unilateral_leftfoot_min_func_decref(void);
+casadi_int cineq_unilateral_leftfoot_min_func_n_in(void);
+casadi_int cineq_unilateral_leftfoot_min_func_n_out(void);
+casadi_real cineq_unilateral_leftfoot_min_func_default_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_min_func_name_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_min_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_min_func_sparsity_out(casadi_int i);
+int cineq_unilateral_leftfoot_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_leftfoot_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_leftfoot_min_func_SZ_ARG 2
+#define cineq_unilateral_leftfoot_min_func_SZ_RES 1
+#define cineq_unilateral_leftfoot_min_func_SZ_IW 0
+#define cineq_unilateral_leftfoot_min_func_SZ_W 0
+int cineq_unilateral_rightfoot_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_rightfoot_max_func_alloc_mem(void);
+int cineq_unilateral_rightfoot_max_func_init_mem(int mem);
+void cineq_unilateral_rightfoot_max_func_free_mem(int mem);
+int cineq_unilateral_rightfoot_max_func_checkout(void);
+void cineq_unilateral_rightfoot_max_func_release(int mem);
+void cineq_unilateral_rightfoot_max_func_incref(void);
+void cineq_unilateral_rightfoot_max_func_decref(void);
+casadi_int cineq_unilateral_rightfoot_max_func_n_in(void);
+casadi_int cineq_unilateral_rightfoot_max_func_n_out(void);
+casadi_real cineq_unilateral_rightfoot_max_func_default_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_max_func_name_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_max_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_max_func_sparsity_out(casadi_int i);
+int cineq_unilateral_rightfoot_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_rightfoot_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_rightfoot_max_func_SZ_ARG 2
+#define cineq_unilateral_rightfoot_max_func_SZ_RES 1
+#define cineq_unilateral_rightfoot_max_func_SZ_IW 0
+#define cineq_unilateral_rightfoot_max_func_SZ_W 0
+int cineq_unilateral_rightfoot_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_rightfoot_min_func_alloc_mem(void);
+int cineq_unilateral_rightfoot_min_func_init_mem(int mem);
+void cineq_unilateral_rightfoot_min_func_free_mem(int mem);
+int cineq_unilateral_rightfoot_min_func_checkout(void);
+void cineq_unilateral_rightfoot_min_func_release(int mem);
+void cineq_unilateral_rightfoot_min_func_incref(void);
+void cineq_unilateral_rightfoot_min_func_decref(void);
+casadi_int cineq_unilateral_rightfoot_min_func_n_in(void);
+casadi_int cineq_unilateral_rightfoot_min_func_n_out(void);
+casadi_real cineq_unilateral_rightfoot_min_func_default_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_min_func_name_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_min_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_min_func_sparsity_out(casadi_int i);
+int cineq_unilateral_rightfoot_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_rightfoot_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_rightfoot_min_func_SZ_ARG 2
+#define cineq_unilateral_rightfoot_min_func_SZ_RES 1
+#define cineq_unilateral_rightfoot_min_func_SZ_IW 0
+#define cineq_unilateral_rightfoot_min_func_SZ_W 0
+int cineq_unilateral_leftfoot_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_leftfoot_max_v_func_alloc_mem(void);
+int cineq_unilateral_leftfoot_max_v_func_init_mem(int mem);
+void cineq_unilateral_leftfoot_max_v_func_free_mem(int mem);
+int cineq_unilateral_leftfoot_max_v_func_checkout(void);
+void cineq_unilateral_leftfoot_max_v_func_release(int mem);
+void cineq_unilateral_leftfoot_max_v_func_incref(void);
+void cineq_unilateral_leftfoot_max_v_func_decref(void);
+casadi_int cineq_unilateral_leftfoot_max_v_func_n_in(void);
+casadi_int cineq_unilateral_leftfoot_max_v_func_n_out(void);
+casadi_real cineq_unilateral_leftfoot_max_v_func_default_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_max_v_func_name_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_max_v_func_sparsity_out(casadi_int i);
+int cineq_unilateral_leftfoot_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_leftfoot_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_leftfoot_max_v_func_SZ_ARG 2
+#define cineq_unilateral_leftfoot_max_v_func_SZ_RES 1
+#define cineq_unilateral_leftfoot_max_v_func_SZ_IW 0
+#define cineq_unilateral_leftfoot_max_v_func_SZ_W 0
+int cineq_unilateral_leftfoot_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_leftfoot_min_v_func_alloc_mem(void);
+int cineq_unilateral_leftfoot_min_v_func_init_mem(int mem);
+void cineq_unilateral_leftfoot_min_v_func_free_mem(int mem);
+int cineq_unilateral_leftfoot_min_v_func_checkout(void);
+void cineq_unilateral_leftfoot_min_v_func_release(int mem);
+void cineq_unilateral_leftfoot_min_v_func_incref(void);
+void cineq_unilateral_leftfoot_min_v_func_decref(void);
+casadi_int cineq_unilateral_leftfoot_min_v_func_n_in(void);
+casadi_int cineq_unilateral_leftfoot_min_v_func_n_out(void);
+casadi_real cineq_unilateral_leftfoot_min_v_func_default_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_min_v_func_name_in(casadi_int i);
+const char* cineq_unilateral_leftfoot_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_leftfoot_min_v_func_sparsity_out(casadi_int i);
+int cineq_unilateral_leftfoot_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_leftfoot_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_leftfoot_min_v_func_SZ_ARG 2
+#define cineq_unilateral_leftfoot_min_v_func_SZ_RES 1
+#define cineq_unilateral_leftfoot_min_v_func_SZ_IW 0
+#define cineq_unilateral_leftfoot_min_v_func_SZ_W 0
+int cineq_unilateral_rightfoot_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_rightfoot_max_v_func_alloc_mem(void);
+int cineq_unilateral_rightfoot_max_v_func_init_mem(int mem);
+void cineq_unilateral_rightfoot_max_v_func_free_mem(int mem);
+int cineq_unilateral_rightfoot_max_v_func_checkout(void);
+void cineq_unilateral_rightfoot_max_v_func_release(int mem);
+void cineq_unilateral_rightfoot_max_v_func_incref(void);
+void cineq_unilateral_rightfoot_max_v_func_decref(void);
+casadi_int cineq_unilateral_rightfoot_max_v_func_n_in(void);
+casadi_int cineq_unilateral_rightfoot_max_v_func_n_out(void);
+casadi_real cineq_unilateral_rightfoot_max_v_func_default_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_max_v_func_name_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_max_v_func_sparsity_out(casadi_int i);
+int cineq_unilateral_rightfoot_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_rightfoot_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_rightfoot_max_v_func_SZ_ARG 2
+#define cineq_unilateral_rightfoot_max_v_func_SZ_RES 1
+#define cineq_unilateral_rightfoot_max_v_func_SZ_IW 0
+#define cineq_unilateral_rightfoot_max_v_func_SZ_W 0
+int cineq_unilateral_rightfoot_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_unilateral_rightfoot_min_v_func_alloc_mem(void);
+int cineq_unilateral_rightfoot_min_v_func_init_mem(int mem);
+void cineq_unilateral_rightfoot_min_v_func_free_mem(int mem);
+int cineq_unilateral_rightfoot_min_v_func_checkout(void);
+void cineq_unilateral_rightfoot_min_v_func_release(int mem);
+void cineq_unilateral_rightfoot_min_v_func_incref(void);
+void cineq_unilateral_rightfoot_min_v_func_decref(void);
+casadi_int cineq_unilateral_rightfoot_min_v_func_n_in(void);
+casadi_int cineq_unilateral_rightfoot_min_v_func_n_out(void);
+casadi_real cineq_unilateral_rightfoot_min_v_func_default_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_min_v_func_name_in(casadi_int i);
+const char* cineq_unilateral_rightfoot_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_unilateral_rightfoot_min_v_func_sparsity_out(casadi_int i);
+int cineq_unilateral_rightfoot_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_unilateral_rightfoot_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_unilateral_rightfoot_min_v_func_SZ_ARG 2
+#define cineq_unilateral_rightfoot_min_v_func_SZ_RES 1
+#define cineq_unilateral_rightfoot_min_v_func_SZ_IW 0
+#define cineq_unilateral_rightfoot_min_v_func_SZ_W 0
+int cineq_fric_leftfoot_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_leftfoot_max_func_alloc_mem(void);
+int cineq_fric_leftfoot_max_func_init_mem(int mem);
+void cineq_fric_leftfoot_max_func_free_mem(int mem);
+int cineq_fric_leftfoot_max_func_checkout(void);
+void cineq_fric_leftfoot_max_func_release(int mem);
+void cineq_fric_leftfoot_max_func_incref(void);
+void cineq_fric_leftfoot_max_func_decref(void);
+casadi_int cineq_fric_leftfoot_max_func_n_in(void);
+casadi_int cineq_fric_leftfoot_max_func_n_out(void);
+casadi_real cineq_fric_leftfoot_max_func_default_in(casadi_int i);
+const char* cineq_fric_leftfoot_max_func_name_in(casadi_int i);
+const char* cineq_fric_leftfoot_max_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_max_func_sparsity_out(casadi_int i);
+int cineq_fric_leftfoot_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_leftfoot_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_leftfoot_max_func_SZ_ARG 4
+#define cineq_fric_leftfoot_max_func_SZ_RES 1
+#define cineq_fric_leftfoot_max_func_SZ_IW 0
+#define cineq_fric_leftfoot_max_func_SZ_W 0
+int cineq_fric_leftfoot_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_leftfoot_min_func_alloc_mem(void);
+int cineq_fric_leftfoot_min_func_init_mem(int mem);
+void cineq_fric_leftfoot_min_func_free_mem(int mem);
+int cineq_fric_leftfoot_min_func_checkout(void);
+void cineq_fric_leftfoot_min_func_release(int mem);
+void cineq_fric_leftfoot_min_func_incref(void);
+void cineq_fric_leftfoot_min_func_decref(void);
+casadi_int cineq_fric_leftfoot_min_func_n_in(void);
+casadi_int cineq_fric_leftfoot_min_func_n_out(void);
+casadi_real cineq_fric_leftfoot_min_func_default_in(casadi_int i);
+const char* cineq_fric_leftfoot_min_func_name_in(casadi_int i);
+const char* cineq_fric_leftfoot_min_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_min_func_sparsity_out(casadi_int i);
+int cineq_fric_leftfoot_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_leftfoot_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_leftfoot_min_func_SZ_ARG 4
+#define cineq_fric_leftfoot_min_func_SZ_RES 1
+#define cineq_fric_leftfoot_min_func_SZ_IW 0
+#define cineq_fric_leftfoot_min_func_SZ_W 0
+int cineq_fric_rightfoot_max_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_rightfoot_max_func_alloc_mem(void);
+int cineq_fric_rightfoot_max_func_init_mem(int mem);
+void cineq_fric_rightfoot_max_func_free_mem(int mem);
+int cineq_fric_rightfoot_max_func_checkout(void);
+void cineq_fric_rightfoot_max_func_release(int mem);
+void cineq_fric_rightfoot_max_func_incref(void);
+void cineq_fric_rightfoot_max_func_decref(void);
+casadi_int cineq_fric_rightfoot_max_func_n_in(void);
+casadi_int cineq_fric_rightfoot_max_func_n_out(void);
+casadi_real cineq_fric_rightfoot_max_func_default_in(casadi_int i);
+const char* cineq_fric_rightfoot_max_func_name_in(casadi_int i);
+const char* cineq_fric_rightfoot_max_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_max_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_max_func_sparsity_out(casadi_int i);
+int cineq_fric_rightfoot_max_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_rightfoot_max_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_rightfoot_max_func_SZ_ARG 4
+#define cineq_fric_rightfoot_max_func_SZ_RES 1
+#define cineq_fric_rightfoot_max_func_SZ_IW 0
+#define cineq_fric_rightfoot_max_func_SZ_W 0
+int cineq_fric_rightfoot_min_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_rightfoot_min_func_alloc_mem(void);
+int cineq_fric_rightfoot_min_func_init_mem(int mem);
+void cineq_fric_rightfoot_min_func_free_mem(int mem);
+int cineq_fric_rightfoot_min_func_checkout(void);
+void cineq_fric_rightfoot_min_func_release(int mem);
+void cineq_fric_rightfoot_min_func_incref(void);
+void cineq_fric_rightfoot_min_func_decref(void);
+casadi_int cineq_fric_rightfoot_min_func_n_in(void);
+casadi_int cineq_fric_rightfoot_min_func_n_out(void);
+casadi_real cineq_fric_rightfoot_min_func_default_in(casadi_int i);
+const char* cineq_fric_rightfoot_min_func_name_in(casadi_int i);
+const char* cineq_fric_rightfoot_min_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_min_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_min_func_sparsity_out(casadi_int i);
+int cineq_fric_rightfoot_min_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_rightfoot_min_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_rightfoot_min_func_SZ_ARG 4
+#define cineq_fric_rightfoot_min_func_SZ_RES 1
+#define cineq_fric_rightfoot_min_func_SZ_IW 0
+#define cineq_fric_rightfoot_min_func_SZ_W 0
+int cineq_fric_leftfoot_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_leftfoot_max_v_func_alloc_mem(void);
+int cineq_fric_leftfoot_max_v_func_init_mem(int mem);
+void cineq_fric_leftfoot_max_v_func_free_mem(int mem);
+int cineq_fric_leftfoot_max_v_func_checkout(void);
+void cineq_fric_leftfoot_max_v_func_release(int mem);
+void cineq_fric_leftfoot_max_v_func_incref(void);
+void cineq_fric_leftfoot_max_v_func_decref(void);
+casadi_int cineq_fric_leftfoot_max_v_func_n_in(void);
+casadi_int cineq_fric_leftfoot_max_v_func_n_out(void);
+casadi_real cineq_fric_leftfoot_max_v_func_default_in(casadi_int i);
+const char* cineq_fric_leftfoot_max_v_func_name_in(casadi_int i);
+const char* cineq_fric_leftfoot_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_max_v_func_sparsity_out(casadi_int i);
+int cineq_fric_leftfoot_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_leftfoot_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_leftfoot_max_v_func_SZ_ARG 4
+#define cineq_fric_leftfoot_max_v_func_SZ_RES 1
+#define cineq_fric_leftfoot_max_v_func_SZ_IW 0
+#define cineq_fric_leftfoot_max_v_func_SZ_W 0
+int cineq_fric_leftfoot_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_leftfoot_min_v_func_alloc_mem(void);
+int cineq_fric_leftfoot_min_v_func_init_mem(int mem);
+void cineq_fric_leftfoot_min_v_func_free_mem(int mem);
+int cineq_fric_leftfoot_min_v_func_checkout(void);
+void cineq_fric_leftfoot_min_v_func_release(int mem);
+void cineq_fric_leftfoot_min_v_func_incref(void);
+void cineq_fric_leftfoot_min_v_func_decref(void);
+casadi_int cineq_fric_leftfoot_min_v_func_n_in(void);
+casadi_int cineq_fric_leftfoot_min_v_func_n_out(void);
+casadi_real cineq_fric_leftfoot_min_v_func_default_in(casadi_int i);
+const char* cineq_fric_leftfoot_min_v_func_name_in(casadi_int i);
+const char* cineq_fric_leftfoot_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_leftfoot_min_v_func_sparsity_out(casadi_int i);
+int cineq_fric_leftfoot_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_leftfoot_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_leftfoot_min_v_func_SZ_ARG 4
+#define cineq_fric_leftfoot_min_v_func_SZ_RES 1
+#define cineq_fric_leftfoot_min_v_func_SZ_IW 0
+#define cineq_fric_leftfoot_min_v_func_SZ_W 0
+int cineq_fric_rightfoot_max_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_rightfoot_max_v_func_alloc_mem(void);
+int cineq_fric_rightfoot_max_v_func_init_mem(int mem);
+void cineq_fric_rightfoot_max_v_func_free_mem(int mem);
+int cineq_fric_rightfoot_max_v_func_checkout(void);
+void cineq_fric_rightfoot_max_v_func_release(int mem);
+void cineq_fric_rightfoot_max_v_func_incref(void);
+void cineq_fric_rightfoot_max_v_func_decref(void);
+casadi_int cineq_fric_rightfoot_max_v_func_n_in(void);
+casadi_int cineq_fric_rightfoot_max_v_func_n_out(void);
+casadi_real cineq_fric_rightfoot_max_v_func_default_in(casadi_int i);
+const char* cineq_fric_rightfoot_max_v_func_name_in(casadi_int i);
+const char* cineq_fric_rightfoot_max_v_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_max_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_max_v_func_sparsity_out(casadi_int i);
+int cineq_fric_rightfoot_max_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_rightfoot_max_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_rightfoot_max_v_func_SZ_ARG 4
+#define cineq_fric_rightfoot_max_v_func_SZ_RES 1
+#define cineq_fric_rightfoot_max_v_func_SZ_IW 0
+#define cineq_fric_rightfoot_max_v_func_SZ_W 0
+int cineq_fric_rightfoot_min_v_func(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem);
+int cineq_fric_rightfoot_min_v_func_alloc_mem(void);
+int cineq_fric_rightfoot_min_v_func_init_mem(int mem);
+void cineq_fric_rightfoot_min_v_func_free_mem(int mem);
+int cineq_fric_rightfoot_min_v_func_checkout(void);
+void cineq_fric_rightfoot_min_v_func_release(int mem);
+void cineq_fric_rightfoot_min_v_func_incref(void);
+void cineq_fric_rightfoot_min_v_func_decref(void);
+casadi_int cineq_fric_rightfoot_min_v_func_n_in(void);
+casadi_int cineq_fric_rightfoot_min_v_func_n_out(void);
+casadi_real cineq_fric_rightfoot_min_v_func_default_in(casadi_int i);
+const char* cineq_fric_rightfoot_min_v_func_name_in(casadi_int i);
+const char* cineq_fric_rightfoot_min_v_func_name_out(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_min_v_func_sparsity_in(casadi_int i);
+const casadi_int* cineq_fric_rightfoot_min_v_func_sparsity_out(casadi_int i);
+int cineq_fric_rightfoot_min_v_func_work(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+int cineq_fric_rightfoot_min_v_func_work_bytes(casadi_int *sz_arg, casadi_int* sz_res, casadi_int *sz_iw, casadi_int *sz_w);
+#define cineq_fric_rightfoot_min_v_func_SZ_ARG 4
+#define cineq_fric_rightfoot_min_v_func_SZ_RES 1
+#define cineq_fric_rightfoot_min_v_func_SZ_IW 0
+#define cineq_fric_rightfoot_min_v_func_SZ_W 0
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
