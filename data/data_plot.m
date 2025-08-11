@@ -4,26 +4,18 @@ close all
 
 dataWBC = readmatrix('dataWBC1.txt');
 torque_qp = dataWBC(:, 1:33);
-dataWBC = readmatrix('dataCC6.txt');
+dataCC = readmatrix('dataCC6.txt');
 torque = dataWBC(:, 1:33);
-dataWBC = readmatrix('dataWBC2.txt');
-wrench_lhand_qp = dataWBC(:, 1:6);
-dataWBC = readmatrix('dataWBC3.txt');
-wrench_lhand_des= dataWBC(:, 1:6);
 
-dataWBC = readmatrix('dataWBC4.txt');
-wrench_contact_qp= dataWBC(:, 1:12);
-dataWBC = readmatrix('dataWBC5.txt');
-wrench_contact_des= dataWBC(:, 1:12);
 
 
 figure()
 title('leg torque')
 start_cnt = 0;
 for cnt = 1:1:6
-    plot(torque(:,start_cnt + cnt));
-    hold on
     plot(torque_qp(:,start_cnt + cnt));
+    hold on
+    plot(torque(:,start_cnt + cnt));
     legend()
 end 
 
@@ -31,26 +23,16 @@ figure()
 title('arm torque')
 start_cnt = 15;
 for cnt = 1:1:7
-    plot(torque(:,start_cnt + cnt));
+    plot(torque_qp(:,start_cnt + cnt));
     hold on
+    plot(torque(:,start_cnt + cnt));
+
     legend()
+
 end 
-    plot(torque(:,start_cnt + 8),'k');
+    plot(torque_qp(:,start_cnt + 8),'k');
+    plot(torque(:,start_cnt + 8));
 
-figure()
-start_cnt = 6;
-plot(wrench_lhand_qp(:,start_cnt));
-hold on
-plot(wrench_lhand_des(:,start_cnt));
-legend()
-
-
-figure()
-start_cnt = 3;
-plot(wrench_contact_qp(:,start_cnt));
-hold on
-plot(wrench_contact_des(:,start_cnt));
-legend()
 
 
 %%
@@ -74,9 +56,9 @@ figure()
 start_cnt = 0;
 for cnt = 1:1:3
     subplot(3,1,cnt)
-    plot(base_pos(:,start_cnt + cnt));
+    plot(lhand_pos(:,start_cnt + cnt));
     hold on
-    plot(base_pos(:,start_cnt + cnt + 3 ));
+    plot(lhand_pos(:,start_cnt + cnt + 3 ));
 
     legend('des', 'mea')
 end

@@ -74,7 +74,7 @@ public:
     Eigen::VectorXd Kd; Eigen::MatrixXd Kd_diag;
     Eigen::VectorXd Kp_virtual; Eigen::MatrixVVd Kp_virtual_diag;
     Eigen::VectorXd Kd_virtual; Eigen::MatrixVVd Kd_virtual_diag;
-    std::map<std::string, Eigen::VectorXd> W_task;
+    Eigen::VectorQd W_torque;     
     Eigen::VectorQd W_energy;     
     Eigen::VectorXd W_contact;     
     Eigen::VectorQd W_torque_prev;

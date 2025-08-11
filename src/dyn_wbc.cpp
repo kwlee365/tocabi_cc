@@ -115,10 +115,6 @@ bool DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& wbd_dyn
     dataWBC6 << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << std::endl;
 
     dataWBC1 << torque_sol.transpose() << std::endl;
-    // dataWBC2 << (J_task_inv_T["L_Wrist2_Link"] * torque_sol).transpose() << std::endl; 
-    // dataWBC3 << F_task["L_Wrist2_Link"].transpose() << std::endl; 
-    // dataWBC4 << (J_contact_inv_T * torque_sol).transpose() << std::endl; 
-    // dataWBC5 << F_contact.transpose() << std::endl; 
 
     //---Return 
     torque_unbound = torque_sol;
@@ -143,52 +139,29 @@ void DynWBC::setRobotSystemParameters(const double& mu_, const double& foot_size
     q_vel_h_lim = q_vel_h_lim_;
 }
 
-void DynWBC::setWbcWeights(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task,
-                           const std::map<std::string, Eigen::VectorXd>& W_task_, const Eigen::VectorQd& W_energy_, const Eigen::VectorXd& W_contact_, const Eigen::VectorQd& W_torque_prev_)
-{
-    for (const auto& task_group : wbd_dynamic_task)
-    {
-        int m = 3 * task_group.size();
-        for (const auto& [name, type] : task_group){ W_task[name] = Eigen::VectorXd::Zero(m);}
-
-        std::set<std::string> visited;
-        for (size_t i = 0; i < task_group.size(); ++i)
-        {
-            const auto& [name, type] = task_group[i];
-
-            if (visited.count(name))
-                continue;
-            visited.insert(name);
-
-            W_task[name] = W_task_.at(name);
-        }
-    }
+void DynWBC::setWbcWeights(const Eigen::VectorQd& W_torque_,
+                           const Eigen::VectorQd& W_energy_, 
+                           const Eigen::VectorXd& W_contact_)
+ {
+    W_torque = W_torque_;
 
     W_energy = W_energy_;
 
     W_contact.setZero(W_contact_.size());
     W_contact = W_contact_;
 
-    W_torque_prev = W_torque_prev_;
-
     //--- Print
     static bool weight_checker = false;
     if(weight_checker == true)
     {
-        std::cout << "====== W_task ======" << std::endl;
-        for (const auto& [name, vec] : W_task)
-        {
-            std::cout << name << " : " << vec.transpose() << std::endl;
-        }
+        std::cout << "\n====== W_torque ======" << std::endl;
+        std::cout << W_torque.transpose() << std::endl;
 
         std::cout << "\n====== W_energy ======" << std::endl;
         std::cout << W_energy.transpose() << std::endl;
 
         std::cout << "\n====== W_contact ======" << std::endl;
         std::cout << W_contact.transpose() << std::endl;
-
-        std::cout << "\n====== W_torque_prev ======" << std::endl;
-        std::cout << W_torque_prev.transpose() << std::endl;
 
         weight_checker = false;
     }
@@ -282,6 +255,10 @@ void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>> &wbd_dynami
     torque_impedance.setZero();
     torque_impedance = torque_impedance_;
 
+    //--- || qddot - qddot_nom ||^2
+    J_torque_nominal.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF);
+    J_torque_nominal = (M_inv * base_contact_N_).rightCols(MODEL_DOF);
+
     //--- Relationship btw Contact wrench and Toruqe
     J_contact_inv_T = (-1.0) * base_contact_Jac_inv_T_.rightCols(MODEL_DOF);
     F_contact = F_gravity + (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_) - base_contact_Jac_inv_T_ * Grav_;
@@ -332,48 +309,22 @@ void DynWBC::calcCostHess(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_
 {
     Hess.setZero(MODEL_DOF, MODEL_DOF);
 
-    // std::set<std::string> visited;
-    // for (const auto& task_group : wbd_dynamic_task)
-    // {
-    //     for (const auto& [name, type] : task_group)
-    //     { 
-    //         if (visited.count(name))
-    //             continue;
-    //         visited.insert(name);
-
-    //         Hess += J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * J_task_inv_T[name]; 
-    //     }
-    // }
+    Hess += W_torque.asDiagonal(); 
 
     // Hess += J_contact_inv_T.transpose() * W_contact.asDiagonal() * J_contact_inv_T; 
 
-    // Hess += W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * A);
-
-    // Hess += W_torque_prev.asDiagonal();
+    Hess += W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * A);
 }
 
 void DynWBC::calcCostGrad(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task)
 {
     grad.setZero(MODEL_DOF);
 
-    // std::set<std::string> visited;
-    // for (const auto& task_group : wbd_dynamic_task)
-    // {
-    //     for (const auto& [name, type] : task_group)
-    //     { 
-    //         if (visited.count(name))
-    //             continue;
-    //         visited.insert(name);
-
-    //         grad -= J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * F_task[name]; 
-    //     }
-    // }
+    grad -= W_torque.asDiagonal() * torque_impedance;
 
     // grad -= J_contact_inv_T.transpose() * W_contact.asDiagonal() * F_contact;
 
-    // grad -= W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * G);
-
-    // grad -= W_torque_prev.asDiagonal() * torque_prev;
+    grad -= W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * G);
 }
 
 void DynWBC::calcEqualityConstraint()
@@ -384,18 +335,18 @@ void DynWBC::calcEqualityConstraint()
 void DynWBC::calcInequalityConstraint()
 {
     // //--- (1) Torque constraints
-    Eigen::MatrixQQd A_torque; A_torque.setIdentity();
-    Eigen::VectorQd lbA_torque; lbA_torque = (-1.0) * torque_lim;
-    Eigen::VectorQd ubA_torque; ubA_torque = (+1.0) * torque_lim;
-    constraints_.push_back({A_torque, lbA_torque, ubA_torque});   // --- Torque Boundary (Size 33)
+    // Eigen::MatrixQQd A_torque; A_torque.setIdentity();
+    // Eigen::VectorQd lbA_torque; lbA_torque = (-1.0) * torque_lim;
+    // Eigen::VectorQd ubA_torque; ubA_torque = (+1.0) * torque_lim;
+    // constraints_.push_back({A_torque, lbA_torque, ubA_torque});   // --- Torque Boundary (Size 33)
 
-    // //--- (2) Joint position constraints
+    // // //--- (2) Joint position constraints
     Eigen::MatrixQQd A_qpos; A_qpos = (M_inv * A).bottomRows(MODEL_DOF);
     Eigen::VectorQd lbA_qpos; lbA_qpos = alpha1 * alpha2 * (q_pos_l_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
     Eigen::VectorQd ubA_qpos; ubA_qpos = alpha1 * alpha2 * (q_pos_h_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
     constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
 
-    // //--- (3) Friction cone constraints
+    // // //--- (3) Friction cone constraints
     constraints_.push_back({   
         J_fric,
         Eigen::VectorXd::Constant(J_fric.rows(), -std::numeric_limits<double>::infinity()),

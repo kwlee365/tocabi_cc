@@ -39,8 +39,9 @@ public:
     void setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_, const double& force_z_max_, const double& force_z_min_, 
                                   const Eigen::VectorQd& torque_lim_, const Eigen::VectorQd& q_pos_l_lim_, const Eigen::VectorQd& q_pos_h_lim_, const Eigen::VectorQd& q_vel_l_lim_, const Eigen::VectorQd& q_vel_h_lim_);
     
-    void setWbcWeights(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
-                       const std::map<std::string, Eigen::VectorXd>& W_task_, const Eigen::VectorQd& W_energy_, const Eigen::VectorXd& W_contact_, const Eigen::VectorQd& W_torque_prev_);
+    void setWbcWeights(const Eigen::VectorQd& W_torque_,
+                       const Eigen::VectorQd& W_energy_, 
+                       const Eigen::VectorXd& W_contact_);
                         
     void computeContactWrench(const ContactIndicator& contactMode,const double& MG);
 
@@ -87,8 +88,8 @@ private:
     double force_z_min = 0.0;
     double MG = 0.0;
 
-    double alpha1 = 10.0;
-    double alpha2 = 10.0;
+    double alpha1 = 100.0;
+    double alpha2 = 100.0;
     double alpha3 = 10.0;
 
     //--- Local eigen variables
@@ -111,6 +112,7 @@ private:
     Eigen::MatrixXd N_task;
     Eigen::VectorXd F_task; 
     Eigen::VectorQd torque_impedance;
+    Eigen::MatrixXd J_torque_nominal;
     Eigen::MatrixXd J_contact_inv_T;
     Eigen::VectorXd F_contact; 
     Eigen::VectorXd F_gravity; 
@@ -118,11 +120,9 @@ private:
     Eigen::VectorXd ubA_fric;
     Eigen::VectorQd torque_nominal;
 
-
-    std::map<std::string, Eigen::VectorXd> W_task; 
+    Eigen::VectorQd W_torque;
     Eigen::VectorQd W_energy;
     Eigen::VectorXd W_contact;
-    Eigen::VectorQd W_torque_prev;
 
     ContactIndicator contact_mode_local = ContactIndicator::DoubleSupport;
     ContactIndicator contact_mode_local_prev = ContactIndicator::DoubleSupport;
