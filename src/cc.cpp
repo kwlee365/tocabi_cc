@@ -9,7 +9,7 @@ ofstream dataCC4("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC4.txt");
 ofstream dataCC5("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC5.txt");
 ofstream dataCC6("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC6.txt");
 
-CustomController::CustomController(RobotData &rd) : rd_(rd), dyn_wbc_(MODEL_DOF_VIRTUAL)
+CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_VIRTUAL),  dyn_wbc_(MODEL_DOF_VIRTUAL)
 {
     //--- ROS Node Handle
     nh_cc_.setCallbackQueue(&queue_cc_);
@@ -62,15 +62,15 @@ void CustomController::computeSlow()
             {
                 saveInitialState();
                 dyn_wbc_.setRobotSystemParameters(0.8,                 // Friction Coefficient
-                                                0.3,                 // Foot size
-                                                0.16,                // Foot width
-                                                2000.0,              // Max vertical contact force
-                                                0.0,                 // Min Vertical contact force                             
-                                                rd_.torque_limit,    // Torque limit
-                                                joint_pos_limit_l_,
-                                                joint_pos_limit_h_,
-                                                joint_vel_limit_l_,
-                                                joint_vel_limit_h_);
+                                                  0.3,                 // Foot size
+                                                  0.16,                // Foot width
+                                                  2000.0,              // Max vertical contact force
+                                                  0.0,                 // Min Vertical contact force                             
+                                                  rd_.torque_limit,    // Torque limit
+                                                  joint_pos_limit_l_,
+                                                  joint_pos_limit_h_,
+                                                  joint_vel_limit_l_,
+                                                  joint_vel_limit_h_);
 
                 cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
                 cout << "TIME: "<< rd_.control_time_ << endl; 
@@ -80,53 +80,57 @@ void CustomController::computeSlow()
 
             contactStateManager();
 
-            // motion_mode_ = TestMotionType::Taichi;
-            // motion_mode_ = TestMotionType::PelvHand;
-            motion_mode_ = TestMotionType::PelvHandJoy;
-            runTestMotion(5.0, 0.1, 0.2, 0.2, 0.6);
+            motion_mode_ = TestMotionType::PelvHand;
+            runTestMotion(5.0, 0.15, 0.2, 0.2, 0.6);
 
             taskStateManager();
 
-            //--- Whole-body Control
-            for (const auto& task_group : task_hierarchy)
+            //--- Whole-body Inverse Kinematics
+            kin_wbc_.computeTaskSpaceKinematicWBC(kin_task_hierarchy,
+                                                  x_desired, dx_desired, ddx_desired,
+                                                  R_desired, w_desired, dw_desired,
+                                                  task_Kp, task_Kv, 
+                                                  base_ee_pos, base_ee_rot,
+                                                  base_ee_v, base_ee_w,
+                                                  base_Jac_v, base_Jac_w,
+                                                  base_contact_Jac,
+                                                  M_inv_, rd_.q_dot_virtual_,
+                                                  dq_des, qdot_des, qddot_des);
+            rd_.q_desired += qdot_des.tail(MODEL_DOF) / hz_;
+            Eigen::VectorQd torque_impedance; torque_impedance.setZero();
+            torque_impedance =  qddot_des.tail(MODEL_DOF) + Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_) + Kp_diag * (rd_.q_desired - rd_.q_);
+
+            //--- Safety-concerned Whole-body Control
+            for (const auto& task_group : wbd_dynamic_task)
             {
                 int m = 3 * task_group.size();
-                for (const auto& [name, type] : task_group){ W_task[name] = 1.0 * Eigen::VectorXd::Ones(m);}
+                for (const auto& [name, type] : task_group)
+                { 
+                    
+                    W_task[name] = 1.0 * Eigen::VectorXd::Ones(m);
+                }
             }
-
             W_contact = 1.0 * Eigen::VectorXd::Ones(contact_dim);
             W_energy = 10.0 * Eigen::VectorQd::Ones();
             W_torque_prev = 0.0 * Eigen::VectorQd::Ones();
 
-            dyn_wbc_.setWbcWeights(task_hierarchy, W_task, W_energy, W_contact, W_torque_prev);
-
-            dyn_wbc_.computeTaskImpedance(task_hierarchy,
-                                        task_Kp, task_Kv,
-                                        x_desired, dx_desired, ddx_desired,
-                                        R_desired, w_desired, dw_desired,
-                                        base_ee_pos, base_ee_rot,
-                                        base_ee_v, base_ee_w);
+            dyn_wbc_.setWbcWeights(wbd_dynamic_task, W_task, W_energy, W_contact, W_torque_prev);
 
             dyn_wbc_.computeContactWrench(contact_mode_, rd_.link_[COM_id].mass * GRAVITY);
 
-            dyn_wbc_.getRobotStates(task_hierarchy,
-                                    q_,
-                                    qdot_,
-                                    M_, 
-                                    M_inv_, 
-                                    G_, 
-                                    base_contact_Jac,
-                                    base_contact_Jac_dot,
-                                    base_contact_lambda,
-                                    base_contact_Jac_inv_T,
-                                    base_contact_N, 
-                                    base_task_Jac_inv_T_S_T,
-                                    rd_.torque_desired);
+            dyn_wbc_.getRobotStates(wbd_dynamic_task,
+                                    q_, qdot_,
+                                    M_, M_inv_, G_, 
+                                    base_contact_Jac, base_contact_Jac_dot, base_contact_lambda, base_contact_Jac_inv_T, base_contact_N, 
+                                    base_task_lambda, base_task_Jac_T, base_task_N, base_task_F,
+                                    torque_impedance);
 
             //--- Compute QP-based Whole-body Controller 
             Eigen::VectorQd torque_unbound; torque_unbound.setZero();
             bool qp_status = true;
-            qp_status = dyn_wbc_.computeDynamicWBC(task_hierarchy, torque_unbound);
+            // torque_unbound = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (qdot_des.segment(6, MODEL_DOF) - rd_.q_dot_);  
+            torque_unbound = dyn_wbc_.computeNominalTorque();
+            // qp_status = dyn_wbc_.computeDynamicWBC(wbd_dynamic_task, torque_unbound);
 
             //--- Torque saturation
             Eigen::VectorQd torque_bound;   torque_bound.setZero();
@@ -141,7 +145,7 @@ void CustomController::computeSlow()
                 tick_transition = 0;
                 torque_transition = torque_bound;
             }
-            
+
             if(is_torque_transition == true)
             {
                 for (int i = 0; i < MODEL_DOF; i++) {
@@ -267,27 +271,23 @@ void CustomController::loadParams()
     }
 
     //--- Task Gain
-    task_Kp[base_link_name]  = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[base_link_name](0) = 10000.0;
-    task_Kp[base_link_name](1) = 10000.0;
-    task_Kp[chest_link_name] = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[head_link_name]  = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[lfoot_link_name] = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[rfoot_link_name] = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[lhand_link_name] = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[rhand_link_name] = 40000.0 * Eigen::Vector3d::Ones();
-    task_Kp[com_name]        = 40000.0 * Eigen::Vector3d::Ones();
+    task_Kp[base_link_name]  = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[chest_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[head_link_name]  = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[lfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[rfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[lhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[rhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[com_name]        = 100.0 * Eigen::Vector3d::Ones();
 
-    task_Kv[base_link_name]  = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[base_link_name](0) = 200.0;
-    task_Kv[base_link_name](1) = 200.0;
-    task_Kv[chest_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[head_link_name]  = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[lfoot_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[rfoot_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[lhand_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[rhand_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kv[com_name]        = 400.0 * Eigen::Vector3d::Ones();
+    task_Kv[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[chest_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[head_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 }
 
 void CustomController::moveInitialPose()
@@ -493,7 +493,6 @@ void CustomController::contactStateManager()
         assert(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport);
     }
 
-    //--- Contact Consistent Control Framework for Humanoid Robots
     base_contact_lambda.setZero(contact_dim, contact_dim);
     base_contact_lambda = (base_contact_Jac * M_inv_ * base_contact_Jac.transpose()).llt().solve(MatrixXd::Identity(contact_dim, contact_dim));
 
@@ -506,33 +505,56 @@ void CustomController::contactStateManager()
 
 void CustomController::taskStateManager()
 {
-    for (const auto& task_group : task_hierarchy)
+    std::vector<Eigen::MatrixXd> J_task_vec;
+    std::vector<Eigen::VectorXd> F_star_vec; 
+    
+    J_task_vec.reserve(wbd_dynamic_task.size());
+    F_star_vec.reserve(wbd_dynamic_task.size());
+
+    for (const auto& task_group : wbd_dynamic_task)
     {
         int task_dim = 0;
         Eigen::MatrixXd J_task;
+        Eigen::VectorXd F_task;
+        
+        const auto& task_info = task_group[0];  
+        const std::string& name = task_info.link_name;
+
+        Eigen::Vector3d Kp = task_Kp.at(name);
+        Eigen::Vector3d Kv = task_Kv.at(name);
+
+        Eigen::Vector3d pos_err = x_desired.at(name)  - base_ee_pos.at(name);
+        Eigen::Vector3d linvel_err = dx_desired.at(name) - base_ee_v.at(name);
+        Eigen::Vector3d ori_err = -DyrosMath::getPhi(base_ee_rot.at(name), R_desired.at(name));
+        Eigen::Vector3d angvel_err = w_desired.at(name) - base_ee_w.at(name);
 
         if (task_group.size() == 2)
         {
             task_dim = 6;
-            const auto& task_info = task_group[0];  
 
             J_task.setZero(task_dim, MODEL_DOF_VIRTUAL);
-            J_task = base_Jac[task_info.link_name]; 
+            J_task = base_Jac[name]; 
+
+            F_task.setZero(task_dim);
+            F_task.segment<3>(0) = ddx_desired.at(name) + Kp.asDiagonal() * pos_err + Kv.asDiagonal() * linvel_err;
+            F_task.segment<3>(3) = dw_desired.at(name)  + Kp.asDiagonal() * ori_err + Kv.asDiagonal() * angvel_err;
         }
         else if (task_group.size() == 1)
         {
             task_dim = 3;
-            const auto& task_info = task_group[0];  
 
             J_task.setZero(task_dim, MODEL_DOF_VIRTUAL);
+            F_task.setZero(task_dim);
 
             if (task_info.type == TaskType::Position)
             {
-                J_task = base_Jac[task_info.link_name].topRows(3);
+                J_task = base_Jac[name].topRows(3);
+                F_task.segment<3>(0) = ddx_desired.at(name) + Kp.asDiagonal() * pos_err + Kv.asDiagonal() * linvel_err;
             }
             else if (task_info.type == TaskType::Orientation)
             {
-                J_task = base_Jac[task_info.link_name].bottomRows(3);
+                J_task = base_Jac[name].bottomRows(3);
+                F_task.segment<3>(0) = dw_desired.at(name) + Kp.asDiagonal() * ori_err + Kv.asDiagonal() * angvel_err;
             }
             else
             {
@@ -546,17 +568,59 @@ void CustomController::taskStateManager()
             continue;
         }
 
-        std::string name = task_group[0].link_name; 
-        W_task[name].setZero(task_dim);
+        J_task_vec.push_back(J_task);
+        F_star_vec.push_back(F_task);
+    }
 
-        base_task_lambda[name].setZero(task_dim, task_dim);
-        base_task_lambda[name] = (J_task * M_inv_ * base_contact_N * J_task.transpose()).llt().solve(MatrixXd::Identity(task_dim, task_dim));
+    int total_task_dim = 0;
+    for (const auto& J : J_task_vec) total_task_dim += static_cast<int>(J.rows());
 
-        base_task_Jac_inv_T[name].setZero(task_dim, MODEL_DOF_VIRTUAL);
-        base_task_Jac_inv_T[name] = base_task_lambda[name] * J_task * M_inv_ * base_contact_N;
+    Eigen::MatrixXd J_task_all; J_task_all.setZero(total_task_dim, MODEL_DOF_VIRTUAL);
+    Eigen::VectorXd F_task_all; F_task_all.setZero(total_task_dim);
 
-        base_task_Jac_inv_T_S_T[name].setZero(task_dim, MODEL_DOF);
-        base_task_Jac_inv_T_S_T[name] = base_task_Jac_inv_T[name].rightCols(MODEL_DOF);
+    int r = 0;
+    for (size_t k = 0; k < J_task_vec.size(); ++k)
+    {
+        const auto& J = J_task_vec[k];
+        const auto& F = F_star_vec[k];
+        int d = static_cast<int>(J.rows());
+        J_task_all.block(r, 0, d, MODEL_DOF_VIRTUAL) = J;
+        F_task_all.segment(r, d) = F;
+        r += d;
+    }
+
+    base_task_lambda.setZero(total_task_dim, total_task_dim);
+    base_task_lambda = (J_task_all * M_inv_ * base_contact_N * J_task_all.transpose()).llt().solve(MatrixXd::Identity(total_task_dim, total_task_dim));
+
+    // F_task_all = base_task_lambda * F_task_all;
+
+    base_task_Jac_inv_T.setZero(total_task_dim, MODEL_DOF_VIRTUAL);
+    base_task_Jac_inv_T = base_task_lambda * J_task_all * M_inv_ * base_contact_N;
+
+    base_task_Jac_inv_T_S_T.setZero(total_task_dim, MODEL_DOF);
+    base_task_Jac_inv_T_S_T = base_task_Jac_inv_T.rightCols(MODEL_DOF);
+
+    base_task_Jac_T.setZero(MODEL_DOF, total_task_dim);
+    base_task_Jac_T = DyrosMath::pinv_SVD(base_task_Jac_inv_T_S_T);
+
+    base_task_N.setZero(MODEL_DOF, MODEL_DOF);
+    base_task_N = Eigen::MatrixQQd::Identity() - base_task_Jac_T * base_task_Jac_inv_T_S_T;
+
+    base_task_F.setZero(total_task_dim);
+    base_task_F = F_task_all;
+
+    static bool F_task_checker = true;
+    if(F_task_checker == true)
+    {
+        std::cout << "====== J_task (Impedance Force) ======" << std::endl;
+        std::cout <<  J_task_all.transpose() << std::endl;
+        std::cout << "====== F_task (Impedance Force) ======" << std::endl;
+        std::cout <<  F_task_all.transpose() << std::endl;
+        std::cout << "====== base_task_Jac_inv_T_S_T * base_task_Jac_T ======" << std::endl;
+        std::cout << base_task_Jac_inv_T_S_T * base_task_Jac_T << std::endl;
+
+        std::cout <<  " " << std::endl;
+        F_task_checker = false;
     }
 }
 
@@ -627,17 +691,22 @@ void CustomController::runTestMotion(const double& traj_time, const double& pelv
 
 void CustomController::movePelvHandPose(double traj_time, double pelv_dist, double hand_dist)
 {
-    task_hierarchy= {
+    kin_task_hierarchy= {
             { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
-            // { {com_name,  TaskType::Position}}
             { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
             { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation} },
             { {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
     };
 
+    wbd_dynamic_task = {
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation} },
+            { {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} },
+            { {head_link_name, TaskType::Orientation} }
+    };
+
     std::set<std::string> task_names;
-    for (const auto& task_group : task_hierarchy)
+    for (const auto& task_group : kin_task_hierarchy)
     {
         for (const auto& [name, type] : task_group)
         {
@@ -737,7 +806,7 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
 
 void CustomController::movePelvHandPoseJoy(const double& vx, const double& vy, const double& wz, const double& traj_time, const double& hand_dist)
 {
-    task_hierarchy= {
+    kin_task_hierarchy= {
             { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
             { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
@@ -746,7 +815,7 @@ void CustomController::movePelvHandPoseJoy(const double& vx, const double& vy, c
     };
 
     std::set<std::string> task_names;
-    for (const auto& task_group : task_hierarchy)
+    for (const auto& task_group : kin_task_hierarchy)
     {
         for (const auto& [name, type] : task_group)
         {
@@ -836,7 +905,7 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
 {
     static int tick = 0;
 
-    task_hierarchy= {
+    kin_task_hierarchy= {
             { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
             { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
@@ -846,7 +915,7 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
 
     if ( tick >= traj_time * hz_)
     {
-        task_hierarchy= {
+        kin_task_hierarchy= {
                 { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
                 { {rfoot_link_name, TaskType::Position}, {rfoot_link_name, TaskType::Orientation} },
                 { {chest_link_name, TaskType::Orientation} },
@@ -857,7 +926,7 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
     }
 
     std::set<std::string> task_names;
-    for (const auto& task_group : task_hierarchy)
+    for (const auto& task_group : kin_task_hierarchy)
     {
         for (const auto& [name, type] : task_group)
         {

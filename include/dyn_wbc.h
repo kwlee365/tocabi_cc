@@ -29,9 +29,9 @@ public:
     //--- QP WBC 
     CQuadraticProgram QP_Dyn_Wbc;
 
-    bool computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_, Eigen::VectorQd& torque_unbound);
-    void calcCostGrad(const std::vector<std::vector<TaskInfo>>& task_hierarchy_);
-    void calcCostHess(const std::vector<std::vector<TaskInfo>>& task_hierarchy_);
+    bool computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task, Eigen::VectorQd& torque_unbound);
+    void calcCostGrad(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task);
+    void calcCostHess(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task);
     void calcEqualityConstraint();
     void calcInequalityConstraint();
     void checkGradHessSize();
@@ -42,29 +42,26 @@ public:
     void setWbcWeights(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
                        const std::map<std::string, Eigen::VectorXd>& W_task_, const Eigen::VectorQd& W_energy_, const Eigen::VectorXd& W_contact_, const Eigen::VectorQd& W_torque_prev_);
                         
-
-    void computeTaskImpedance(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
-                              const std::map<std::string, Eigen::Vector3d>& task_Kp, const std::map<std::string, Eigen::Vector3d>& task_Kv, 
-                              const std::map<std::string, Eigen::Vector3d>& x_desired, const std::map<std::string, Eigen::Vector3d>& dx_desired, const std::map<std::string, Eigen::Vector3d>& ddx_desired,
-                              const std::map<std::string, Eigen::Matrix3d>& R_desired, const std::map<std::string, Eigen::Vector3d>& w_desired, const std::map<std::string, Eigen::Vector3d>& dw_desired,
-                              const std::map<std::string, Eigen::Vector3d>& base_ee_pos, const std::map<std::string, Eigen::Matrix3d>& base_ee_rot,
-                              const std::map<std::string, Eigen::Vector3d>& base_ee_v, const std::map<std::string, Eigen::Vector3d>& base_ee_w);
-
     void computeContactWrench(const ContactIndicator& contactMode,const double& MG);
 
-    void getRobotStates(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
-                        const Eigen::VectorVQd& q_,
-                        const Eigen::VectorVQd& qdot_,
-                        const Eigen::MatrixVVd& Mass_, 
-                        const Eigen::MatrixVVd& Mass_inv_, 
-                        const Eigen::VectorVQd& Grav_, 
-                        const Eigen::MatrixXd& base_contact_Jac_,
-                        const Eigen::MatrixXd& base_contact_Jac_dot_,
-                        const Eigen::MatrixXd& base_contact_lambda_,
-                        const Eigen::MatrixXd& base_contact_Jac_inv_T_,
-                        const Eigen::MatrixVVd& base_contact_N_, 
-                        const std::map<std::string, Eigen::MatrixXd>& base_task_Jac_inv_T_S_T_pinv_,
-                        const Eigen::VectorQd& torque_prev_);
+    Eigen::VectorQd computeNominalTorque();
+
+    void getRobotStates(const std::vector<std::vector<TaskInfo>> &wbd_dynamic_task,
+                        const Eigen::VectorVQd &q_,
+                        const Eigen::VectorVQd &qdot_,
+                        const Eigen::MatrixVVd &Mass_,
+                        const Eigen::MatrixVVd &Mass_inv_,
+                        const Eigen::VectorVQd &Grav_,
+                        const Eigen::MatrixXd &base_contact_Jac_,
+                        const Eigen::MatrixXd &base_contact_Jac_dot_,
+                        const Eigen::MatrixXd &base_contact_lambda_,
+                        const Eigen::MatrixXd &base_contact_Jac_inv_T_,
+                        const Eigen::MatrixVVd &base_contact_N_,
+                        const Eigen::MatrixXd &lambda_task_,
+                        const Eigen::MatrixXd &J_task_T_,
+                        const Eigen::MatrixXd &N_task_,
+                        const Eigen::VectorXd &F_task_,
+                        const Eigen::VectorQd &torque_impedance_);
 
     Eigen::MatrixXd Hess;  // HESSIAN
     Eigen::VectorXd grad;  // GRADIENT
@@ -109,13 +106,17 @@ private:
     Eigen::VectorQd q_vel_h_lim;
 
     Eigen::VectorQd torque_prev;
-    std::map<std::string, Eigen::MatrixXd> J_task_inv_T;
-    std::map<std::string, Eigen::VectorXd> F_task; 
+    Eigen::MatrixXd lambda_task;
+    Eigen::MatrixXd J_task_T;
+    Eigen::MatrixXd N_task;
+    Eigen::VectorXd F_task; 
+    Eigen::VectorQd torque_impedance;
     Eigen::MatrixXd J_contact_inv_T;
     Eigen::VectorXd F_contact; 
     Eigen::VectorXd F_gravity; 
     Eigen::MatrixXd J_fric;
     Eigen::VectorXd ubA_fric;
+    Eigen::VectorQd torque_nominal;
 
 
     std::map<std::string, Eigen::VectorXd> W_task; 

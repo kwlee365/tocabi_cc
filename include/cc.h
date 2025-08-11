@@ -9,6 +9,7 @@
 
 #include "tocabi_lib/robot_data.h"
 #include "wholebody_functions.h"
+#include "kin_wbc.h"
 #include "dyn_wbc.h"
 #include "utils.h"
 
@@ -59,8 +60,10 @@ public:
 
     //--- Robot Model
     RigidBodyDynamics::Model model_;  
+    KinWBC kin_wbc_;  
     DynWBC dyn_wbc_;  
-    std::vector<std::vector<TaskInfo>> task_hierarchy;
+    std::vector<std::vector<TaskInfo>> kin_task_hierarchy;
+    std::vector<std::vector<TaskInfo>> wbd_dynamic_task;
     ContactIndicator contact_mode_;
     unsigned int contact_dim = 12;
 
@@ -130,9 +133,12 @@ public:
     Eigen::MatrixXd base_contact_Jac_inv_T;
     Eigen::MatrixVVd base_contact_N;
 
-    std::map<std::string, Eigen::MatrixXd> base_task_lambda;
-    std::map<std::string, Eigen::MatrixXd> base_task_Jac_inv_T;
-    std::map<std::string, Eigen::MatrixXd> base_task_Jac_inv_T_S_T;
+    Eigen::MatrixXd base_task_lambda;
+    Eigen::MatrixXd base_task_Jac_inv_T;
+    Eigen::MatrixXd base_task_Jac_inv_T_S_T;
+    Eigen::MatrixXd base_task_Jac_T;
+    Eigen::MatrixXd base_task_N;
+    Eigen::VectorXd base_task_F;
 
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_w;
@@ -198,116 +204,4 @@ public:
 private:
     Eigen::VectorQd ControlVal_;
     double hz_ = 2000;
-
-    const double NM2CNT[MODEL_DOF] =
-        {  
-            3.0,  //left Leg
-            4.3,
-            3.8,
-            3.46,
-            4.5,
-            6.0,
-            
-            3.0,  //right Leg
-            4.3,
-            3.8,
-            3.46,
-            4.5,
-            6.0,
-            
-            3.3,  //Waist
-            3.3,            
-            3.3,  //upperbody
-            
-            15.5, //shoulder2
-            15.5, //shoulder1
-            15.5, //shoulder2
-            15.5, //arm
-            42.0, //Elbow
-            42.0, //Forearm 
-            95.0, //wrist
-            95.0,
-            
-            95.0, //head
-            95.0,
-            
-            15.5, //shoulder2
-            15.5, //shoulder1
-            15.5, //shoulder2
-            15.5, //arm
-            42.0, //Elbow
-            42.0, //Forearm 
-            95.0, //wrist
-            95.0
-        };
-
-        // Damping values for each joint based on its speed reducer type
-        const double jointDamping[MODEL_DOF] = {
-            0.0248, // HipYaw (shg20_100_2so)
-            0.0248, // HipRoll (shg20_100_2so)
-            0.0248, // HipPitch (shg20_100_2so)
-            0.0248, // KneePitch (shg20_100_2so)
-            0.0248, // AnklePitch (shg20_100_2so)
-            0.0161, // AnkleRoll (shd20_100_2sh)
-
-            0.0248, // HipYaw (shg20_100_2so)
-            0.0248, // HipRoll (shg20_100_2so)
-            0.0248, // HipPitch (shg20_100_2so)
-            0.0248, // KneePitch (shg20_100_2so)
-            0.0248, // AnklePitch (shg20_100_2so)
-            0.0161, // AnkleRoll (shd20_100_2sh)
-
-            0.0417, // WaistYaw (shg25_100_2so)
-            0.0417, // WaistPitch (shg25_100_2so)
-            0.0417, // WaistRoll (shg25_100_2so)
-
-            0.0148, // Shoulder1 (shg17_100_2so)
-            0.0148, // Shoulder2 (shg17_100_2so)
-            0.0148, // Shoulder3 (shg17_100_2so)
-            0.0148, // Armlink (shg17_100_2so)
-            0.0047, // Elbow (shg14_100_2so)
-            0.0047, // ForeArm (shg14_100_2so)
-            0.0029, // Wrist1 (csf_11_100_2xh_f)
-            0.0029, // Wrist2 (csf_11_100_2xh_f)
-
-            0.0029, // Head1 (csf_11_100_2xh_f)
-            0.0029,  // Head2 (csf_11_100_2xh_f)
-
-            0.0148, // Shoulder1 (shg17_100_2so)
-            0.0148, // Shoulder2 (shg17_100_2so)
-            0.0148, // Shoulder3 (shg17_100_2so)
-            0.0148, // Armlink (shg17_100_2so)
-            0.0047, // Elbow (shg14_100_2so)
-            0.0047, // ForeArm (shg14_100_2so)
-            0.0029, // Wrist1 (csf_11_100_2xh_f)
-            0.0029 // Wrist2 (csf_11_100_2xh_f)
-        };
-
-        // Friction loss values for each joint based on its speed reducer type
-        const double jointFrictionLoss[MODEL_DOF] = {
-            9.9,  // HipYaw (shg20_100_2so)
-            9.9,  // HipRoll (shg20_100_2so)
-            9.9,  // HipPitch (shg20_100_2so)
-            9.9,  // KneePitch (shg20_100_2so)
-            9.9,  // AnklePitch (shg20_100_2so)
-            22.0, // AnkleRoll (shd20_100_2sh)
-
-            14.0, // WaistYaw (shg25_100_2so)
-            14.0, // WaistPitch (shg25_100_2so)
-            14.0, // WaistRoll (shg25_100_2so)
-
-            6.5,  // Shoulder1 (shg17_100_2so)
-            6.5,  // Shoulder2 (shg17_100_2so)
-            6.5,  // Shoulder3 (shg17_100_2so)
-            6.5,  // Armlink (shg17_100_2so)
-            3.7,  // Elbow (shg14_100_2so)
-            3.7,  // ForeArm (shg14_100_2so)
-            1.5,  // Wrist1 (csf_11_100_2xh_f)
-            1.5,  // Wrist2 (csf_11_100_2xh_f)
-
-            1.5,  // Head1 (csf_11_100_2xh_f)
-            1.5   // Head2 (csf_11_100_2xh_f)
-        };
-        
-    const double gear_ratio = 100.0;
 };

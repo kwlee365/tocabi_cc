@@ -74,9 +74,9 @@ figure()
 start_cnt = 0;
 for cnt = 1:1:3
     subplot(3,1,cnt)
-    plot(lhand_pos(:,start_cnt + cnt));
+    plot(base_pos(:,start_cnt + cnt));
     hold on
-    plot(lhand_pos(:,start_cnt + cnt + 3 ));
+    plot(base_pos(:,start_cnt + cnt + 3 ));
 
     legend('des', 'mea')
 end

@@ -33,6 +33,7 @@ include_directories(
 
 add_library(${PROJECT_NAME}
   src/cc.cpp
+  src/kin_wbc.cpp
   src/dyn_wbc.cpp
   src/utils.cpp
 )

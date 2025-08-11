@@ -17,13 +17,13 @@ using namespace qpOASES;
 
 DynWBC::DynWBC(int dof) : dof_(dof) { }
 
-bool DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hierarchy_, Eigen::VectorQd& torque_unbound)
+bool DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task, Eigen::VectorQd& torque_unbound)
 {
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
     //--- Initialization
     constraints_.clear();
-    calcCostHess(task_hierarchy_);
-    calcCostGrad(task_hierarchy_);
+    calcCostHess(wbd_dynamic_task);
+    calcCostGrad(wbd_dynamic_task);
     calcEqualityConstraint();
     calcInequalityConstraint();
 
@@ -115,10 +115,10 @@ bool DynWBC::computeDynamicWBC(const std::vector<std::vector<TaskInfo>>& task_hi
     dataWBC6 << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << std::endl;
 
     dataWBC1 << torque_sol.transpose() << std::endl;
-    dataWBC2 << (J_task_inv_T["L_Wrist2_Link"] * torque_sol).transpose() << std::endl; 
-    dataWBC3 << F_task["L_Wrist2_Link"].transpose() << std::endl; 
-    dataWBC4 << (J_contact_inv_T * torque_sol).transpose() << std::endl; 
-    dataWBC5 << F_contact.transpose() << std::endl; 
+    // dataWBC2 << (J_task_inv_T["L_Wrist2_Link"] * torque_sol).transpose() << std::endl; 
+    // dataWBC3 << F_task["L_Wrist2_Link"].transpose() << std::endl; 
+    // dataWBC4 << (J_contact_inv_T * torque_sol).transpose() << std::endl; 
+    // dataWBC5 << F_contact.transpose() << std::endl; 
 
     //---Return 
     torque_unbound = torque_sol;
@@ -143,10 +143,10 @@ void DynWBC::setRobotSystemParameters(const double& mu_, const double& foot_size
     q_vel_h_lim = q_vel_h_lim_;
 }
 
-void DynWBC::setWbcWeights(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
+void DynWBC::setWbcWeights(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task,
                            const std::map<std::string, Eigen::VectorXd>& W_task_, const Eigen::VectorQd& W_energy_, const Eigen::VectorXd& W_contact_, const Eigen::VectorQd& W_torque_prev_)
 {
-    for (const auto& task_group : task_hierarchy_)
+    for (const auto& task_group : wbd_dynamic_task)
     {
         int m = 3 * task_group.size();
         for (const auto& [name, type] : task_group){ W_task[name] = Eigen::VectorXd::Zero(m);}
@@ -170,55 +170,38 @@ void DynWBC::setWbcWeights(const std::vector<std::vector<TaskInfo>>& task_hierar
     W_contact = W_contact_;
 
     W_torque_prev = W_torque_prev_;
-}
 
-void DynWBC::computeTaskImpedance(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
-                                  const std::map<std::string, Eigen::Vector3d>& task_Kp, const std::map<std::string, Eigen::Vector3d>& task_Kv, 
-                                  const std::map<std::string, Eigen::Vector3d>& x_desired, const std::map<std::string, Eigen::Vector3d>& dx_desired, const std::map<std::string, Eigen::Vector3d>& ddx_desired,
-                                  const std::map<std::string, Eigen::Matrix3d>& R_desired, const std::map<std::string, Eigen::Vector3d>& w_desired, const std::map<std::string, Eigen::Vector3d>& dw_desired,
-                                  const std::map<std::string, Eigen::Vector3d>& base_ee_pos, const std::map<std::string, Eigen::Matrix3d>& base_ee_rot,
-                                  const std::map<std::string, Eigen::Vector3d>& base_ee_v, const std::map<std::string, Eigen::Vector3d>& base_ee_w)
-{
-    for (const auto& task_group : task_hierarchy_)
+    //--- Print
+    static bool weight_checker = false;
+    if(weight_checker == true)
     {
-        int m = 3 * task_group.size();
-        for (const auto& [name, type] : task_group){ F_task[name] = Eigen::VectorXd::Zero(m);}
-
-        for (size_t i = 0; i < task_group.size(); ++i)
+        std::cout << "====== W_task ======" << std::endl;
+        for (const auto& [name, vec] : W_task)
         {
-            const auto& [name, type] = task_group[i];
-
-            if (type == TaskType::Position)
-            {
-                Eigen::Vector3d Kp_vec = task_Kp.at(name); 
-                Eigen::Vector3d Kv_vec = task_Kv.at(name);
-
-                Eigen::Vector3d pos_err = x_desired.at(name)  - base_ee_pos.at(name);
-                Eigen::Vector3d vel_err = dx_desired.at(name) - base_ee_v.at(name); 
-
-                F_task.at(name).segment<3>(3 * i) = ddx_desired.at(name) + Kp_vec.asDiagonal() * pos_err + Kv_vec.asDiagonal() * vel_err;
-            }
-            else if (type == TaskType::Orientation)
-            {
-                Eigen::Vector3d Kp_vec = task_Kp.at(name);
-                Eigen::Vector3d Kv_vec = task_Kv.at(name);
-                
-                Eigen::Vector3d ori_err = -DyrosMath::getPhi(base_ee_rot.at(name), R_desired.at(name));
-                // Eigen::Vector3d ori_err = -getOrientationError(base_ee_rot.at(name), R_desired.at(name));
-                Eigen::Vector3d vel_err = (w_desired.at(name) - base_ee_w.at(name)); 
-
-                F_task.at(name).segment<3>(3 * i) = dw_desired.at(name) + Kp_vec.asDiagonal() * ori_err + Kv_vec.asDiagonal() * vel_err;
-            }
-            else
-            {
-                ROS_ERROR("Unknown TaskType for link [%s], type value: %d",
-                        name.c_str(), static_cast<int>(type));
-                assert(false && "Unknown TaskType");
-            }
+            std::cout << name << " : " << vec.transpose() << std::endl;
         }
+
+        std::cout << "\n====== W_energy ======" << std::endl;
+        std::cout << W_energy.transpose() << std::endl;
+
+        std::cout << "\n====== W_contact ======" << std::endl;
+        std::cout << W_contact.transpose() << std::endl;
+
+        std::cout << "\n====== W_torque_prev ======" << std::endl;
+        std::cout << W_torque_prev.transpose() << std::endl;
+
+        weight_checker = false;
     }
 }
 
+Eigen::VectorQd DynWBC::computeNominalTorque()
+{
+    torque_nominal.setZero();
+
+    torque_nominal = J_task_T * F_task + N_task * torque_impedance;
+
+    return (torque_nominal);
+}
                             
 void DynWBC::computeContactWrench(const ContactIndicator& contactMode, const double& MG_)
 {
@@ -246,19 +229,22 @@ void DynWBC::computeContactWrench(const ContactIndicator& contactMode, const dou
     }
 }
 
-void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>>& task_hierarchy_,
-                            const Eigen::VectorVQd& q_,
-                            const Eigen::VectorVQd& qdot_,
-                            const Eigen::MatrixVVd& Mass_, 
-                            const Eigen::MatrixVVd& Mass_inv_, 
-                            const Eigen::VectorVQd& Grav_, 
-                            const Eigen::MatrixXd& base_contact_Jac_,
-                            const Eigen::MatrixXd& base_contact_Jac_dot_,
-                            const Eigen::MatrixXd& base_contact_lambda_,
-                            const Eigen::MatrixXd& base_contact_Jac_inv_T_,
-                            const Eigen::MatrixVVd& base_contact_N_, 
-                            const std::map<std::string, Eigen::MatrixXd>& base_task_Jac_inv_T_S_T_,
-                            const Eigen::VectorQd& torque_prev_)
+void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>> &wbd_dynamic_task,
+                            const Eigen::VectorVQd &q_,
+                            const Eigen::VectorVQd &qdot_,
+                            const Eigen::MatrixVVd &Mass_,
+                            const Eigen::MatrixVVd &Mass_inv_,
+                            const Eigen::VectorVQd &Grav_,
+                            const Eigen::MatrixXd &base_contact_Jac_,
+                            const Eigen::MatrixXd &base_contact_Jac_dot_,
+                            const Eigen::MatrixXd &base_contact_lambda_,
+                            const Eigen::MatrixXd &base_contact_Jac_inv_T_,
+                            const Eigen::MatrixVVd &base_contact_N_,
+                            const Eigen::MatrixXd &lambda_task_,
+                            const Eigen::MatrixXd &J_task_T_,
+                            const Eigen::MatrixXd &N_task_,
+                            const Eigen::VectorXd &F_task_,
+                            const Eigen::VectorQd &torque_impedance_) 
 {
     //--- Robot States
     q = q_;
@@ -274,20 +260,27 @@ void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>>& task_hiera
     std::set<std::string> visited;
 
     //--- Dynamically consistent inverse
-    for (const auto& task_group : task_hierarchy_)
-    {
-        for (const auto& [name, type] : task_group)
-        {
-            if (visited.count(name))
-                continue;
-            visited.insert(name);
+    int rows = lambda_task_.rows();
+    int cols = lambda_task_.cols();
+    lambda_task = Eigen::MatrixXd::Zero(rows, cols);
+    lambda_task = lambda_task_;
 
-            int rows = base_task_Jac_inv_T_S_T_.at(name).rows();
-            int cols = base_task_Jac_inv_T_S_T_.at(name).cols();
-            J_task_inv_T[name] = Eigen::MatrixXd::Zero(rows, cols);
-            J_task_inv_T[name] = base_task_Jac_inv_T_S_T_.at(name);
-        }
-    }
+    rows = J_task_T_.rows();
+    cols = J_task_T_.cols();
+    J_task_T = Eigen::MatrixXd::Zero(rows, cols);
+    J_task_T = J_task_T_;
+
+    rows = N_task_.rows();
+    cols = N_task_.cols();
+    N_task = Eigen::MatrixXd::Zero(rows, cols);
+    N_task = N_task_;
+
+    int size = F_task_.size();
+    F_task = Eigen::VectorXd::Zero(size);
+    F_task = F_task_;
+
+    torque_impedance.setZero();
+    torque_impedance = torque_impedance_;
 
     //--- Relationship btw Contact wrench and Toruqe
     J_contact_inv_T = (-1.0) * base_contact_Jac_inv_T_.rightCols(MODEL_DOF);
@@ -333,57 +326,54 @@ void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>>& task_hiera
         J_fric = (-1.0) * U_fric_ssp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
         ubA_fric = U_fric_ssp * (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_ - base_contact_Jac_inv_T_ * Grav_);
     }
-
-    //--- Torque command regularization
-    torque_prev = torque_prev_;
 }
 
-void DynWBC::calcCostHess(const std::vector<std::vector<TaskInfo>>& task_hierarchy_)
+void DynWBC::calcCostHess(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task)
 {
     Hess.setZero(MODEL_DOF, MODEL_DOF);
 
-    std::set<std::string> visited;
-    for (const auto& task_group : task_hierarchy_)
-    {
-        for (const auto& [name, type] : task_group)
-        { 
-            if (visited.count(name))
-                continue;
-            visited.insert(name);
+    // std::set<std::string> visited;
+    // for (const auto& task_group : wbd_dynamic_task)
+    // {
+    //     for (const auto& [name, type] : task_group)
+    //     { 
+    //         if (visited.count(name))
+    //             continue;
+    //         visited.insert(name);
 
-            Hess += J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * J_task_inv_T[name]; 
-        }
-    }
+    //         Hess += J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * J_task_inv_T[name]; 
+    //     }
+    // }
 
-    Hess += J_contact_inv_T.transpose() * W_contact.asDiagonal() * J_contact_inv_T; 
+    // Hess += J_contact_inv_T.transpose() * W_contact.asDiagonal() * J_contact_inv_T; 
 
-    Hess += W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * A);
+    // Hess += W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * A);
 
-    Hess += W_torque_prev.asDiagonal();
+    // Hess += W_torque_prev.asDiagonal();
 }
 
-void DynWBC::calcCostGrad(const std::vector<std::vector<TaskInfo>>& task_hierarchy_)
+void DynWBC::calcCostGrad(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_task)
 {
     grad.setZero(MODEL_DOF);
 
-    std::set<std::string> visited;
-    for (const auto& task_group : task_hierarchy_)
-    {
-        for (const auto& [name, type] : task_group)
-        { 
-            if (visited.count(name))
-                continue;
-            visited.insert(name);
+    // std::set<std::string> visited;
+    // for (const auto& task_group : wbd_dynamic_task)
+    // {
+    //     for (const auto& [name, type] : task_group)
+    //     { 
+    //         if (visited.count(name))
+    //             continue;
+    //         visited.insert(name);
 
-            grad -= J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * F_task[name]; 
-        }
-    }
+    //         grad -= J_task_inv_T[name].transpose() * W_task[name].asDiagonal() * F_task[name]; 
+    //     }
+    // }
 
-    grad -= J_contact_inv_T.transpose() * W_contact.asDiagonal() * F_contact;
+    // grad -= J_contact_inv_T.transpose() * W_contact.asDiagonal() * F_contact;
 
-    grad -= W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * G);
+    // grad -= W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * G);
 
-    grad -= W_torque_prev.asDiagonal() * torque_prev;
+    // grad -= W_torque_prev.asDiagonal() * torque_prev;
 }
 
 void DynWBC::calcEqualityConstraint()
