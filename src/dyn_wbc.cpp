@@ -353,43 +353,10 @@ void DynWBC::calcInequalityConstraint()
     // constraints_.push_back({A_torque, lbA_torque, ubA_torque});   // --- Torque Boundary (Size 33)
 
     //--- (2) Joint position constraints
-    // Eigen::MatrixQQd A_qpos; A_qpos = (M_inv * A).bottomRows(MODEL_DOF);
-    // Eigen::VectorQd lbA_qpos; lbA_qpos = alpha1 * alpha2 * (q_pos_l_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
-    // Eigen::VectorQd ubA_qpos; ubA_qpos = alpha1 * alpha2 * (q_pos_h_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
-    // constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
-
-    Eigen::MatrixQQd A_qpos;   A_qpos.setZero();
-    Eigen::VectorQd  lbA_qpos; lbA_qpos.setZero();
-    Eigen::VectorQd  ubA_qpos; ubA_qpos.setZero();
-    Eigen::VectorQd  qdot_a; qdot_a = qdot.tail(MODEL_DOF);
-    Eigen::VectorQd  q_a; q_a = q.tail(MODEL_DOF);
-    double qdot_norm = qdot.norm();
-    double cu  = 20.0;    // larger than upperbound of Gravity vector
-    double alpha = 100.0;
-    double alpha_e = 1000.0;
-
-    A_qpos = (qdot.tail(MODEL_DOF).transpose() / alpha_e).replicate(MODEL_DOF, 1);
-    for (int i = 0; i < MODEL_DOF; i++)
-    {
-        // ubA_qpos(i) = qdot.transpose() * G + alpha_e * qdot_a(i) + alpha * (-qdot.transpose() * M * qdot + alpha_e * (q_a(i) - q_pos_l_lim(i)));
-        ubA_qpos(i) = + (qdot_a(i) + alpha * (q_a(i) - q_pos_l_lim(i))) - (cu  / alpha_e) * qdot_norm *(1.0 + alpha * qdot_norm); 
-    }
-    constraints_.push_back({
-        A_qpos, 
-        Eigen::VectorXd::Constant(A_qpos.rows(), -std::numeric_limits<double>::infinity()),
-        ubA_qpos}); 
-
-    A_qpos = (qdot.tail(MODEL_DOF).transpose() / alpha_e).replicate(MODEL_DOF, 1);
-    for (int i = 0; i < MODEL_DOF; i++)
-    {
-        // ubA_qpos(i) = qdot.transpose() * G - alpha_e * qdot_a(i) + alpha * (-qdot.transpose() * M * qdot + alpha_e * (q_pos_h_lim(i) - q_a(i)));
-        ubA_qpos(i) = - (qdot_a(i) + alpha * (q_a(i) - q_pos_h_lim(i))) - (cu  / alpha_e) * qdot_norm *(1.0 + alpha * qdot_norm) ; 
-    }
-    constraints_.push_back({
-        A_qpos, 
-        Eigen::VectorXd::Constant(A_qpos.rows(), -std::numeric_limits<double>::infinity()),
-        ubA_qpos}); 
-
+    Eigen::MatrixQQd A_qpos; A_qpos = (M_inv * A).bottomRows(MODEL_DOF);
+    Eigen::VectorQd lbA_qpos; lbA_qpos = alpha1 * alpha2 * (q_pos_l_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
+    Eigen::VectorQd ubA_qpos; ubA_qpos = alpha1 * alpha2 * (q_pos_h_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
+    constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
         
     //--- (3) Friction cone constraints
     constraints_.push_back({   
@@ -397,37 +364,6 @@ void DynWBC::calcInequalityConstraint()
         Eigen::VectorXd::Constant(A_fric.rows(), -std::numeric_limits<double>::infinity()),
         ubA_fric
     });
-
-    //--- (4) Reachability constraints
-    const int m = static_cast<int>(Hess_reachability_.size()); 
-    A_reachability.setZero(m, MODEL_DOF);
-    lbA_reachability.setZero(m);
-
-    for (int i = 0; i < m; ++i) {
-            A_reachability.block(i, 0, 1, MODEL_DOF) = grad_reachability_[i] * M_inv * A;
-            lbA_reachability(i) = 
-                                + (-1.0) * ( qdot.transpose() * Hess_reachability_[i] * qdot)(0) 
-                                + (-1.0) * ((alpha3 + alpha4) * grad_reachability_[i] * qdot)(0) 
-                                + (-1.0) * ( alpha3 * alpha4 * cbf_reachability_[i]);
-                                + (+1.0) * (grad_reachability_[i] * M_inv * G)(0);
-    }
-
-    // const int m = static_cast<int>(Hess_reachability_.size()); 
-    // A_reachability.setZero(m, MODEL_DOF);
-    // ubA_reachability.setZero(m);
-
-    // A_reachability = (qdot.tail(MODEL_DOF).transpose() / alpha_e).replicate(m, 1);
-    // for (int i = 0; i < m; ++i) {
-    //         // ubA_qpos(i) = - cu * qdot_norm *(1.0 + alpha * qdot_norm) + alpha_e * ((grad_reachability_[i] * qdot)(0) + alpha * cbf_reachability_[i]); 
-    //     ubA_reachability(i) =  ((grad_reachability_[i] * qdot)(0) + alpha * cbf_reachability_[i]) - (cu  / alpha_e) * qdot_norm *(1.0 + alpha * qdot_norm) ; 
-    // }
-
-    constraints_.push_back({   
-        A_reachability,
-        Eigen::VectorXd::Constant(A_reachability.rows(), -std::numeric_limits<double>::infinity()),
-        ubA_reachability
-    });
-
 }
 
 void DynWBC::getReachabilityConstraints(const std::vector<Eigen::MatrixXd> &J_reachability_, const std::vector<double> &h_reachability_)

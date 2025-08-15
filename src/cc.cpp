@@ -83,7 +83,7 @@ void CustomController::computeSlow()
             contactStateManager();
 
             motion_mode_ = TestMotionType::PelvHand;
-            runTestMotion(5.0, 0.15, 0.25, 0.2, 0.6);
+            runTestMotion(5.0, 0.15, 0.15, 0.2, 0.6);
 
             taskStateManager();
 
