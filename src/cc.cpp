@@ -40,6 +40,8 @@ void CustomController::computeSlow()
             loadParams();
 
             q_init_ = rd_.q_;
+            qdot_LPF.setZero();
+
             WBC::SetContact(rd_, true, true);
             
             cout << "COMPUTESLOW MODE 6 IS NOW INITIALIZED" << endl;
@@ -80,8 +82,8 @@ void CustomController::computeSlow()
 
             contactStateManager();
 
-            motion_mode_ = TestMotionType::Taichi;
-            runTestMotion(5.0, 0.1, 0.15, 0.2, 0.6);
+            motion_mode_ = TestMotionType::PelvHand;
+            runTestMotion(5.0, 0.15, 0.25, 0.2, 0.6);
 
             taskStateManager();
 
@@ -101,16 +103,16 @@ void CustomController::computeSlow()
             torque_impedance =  qddot_des.tail(MODEL_DOF) + Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_) + Kp_diag * (rd_.q_desired - rd_.q_);
 
             //--- Safety-concerned Whole-body Control
-            W_torque  = 1.0 * Eigen::VectorQd::Ones();
-            W_contact = 1.0 * Eigen::VectorXd::Ones(contact_dim);
-            W_energy  = 0.0 * Eigen::VectorQd::Ones();
+            W_torque.setConstant(1.0); 
+            W_contact.setConstant(0.0);
+            W_energy.setConstant(0.0); 
 
             dyn_wbc_.setWbcWeights(W_torque, W_energy, W_contact);
 
-            dyn_wbc_.computeContactWrench(contact_mode_, rd_.link_[COM_id].mass * GRAVITY);
+            dyn_wbc_.computeContactWrench(contact_mode_, rd_.link_[link_index_map[com_name]].mass * GRAVITY);
 
             dyn_wbc_.getRobotStates(wbd_dynamic_task,
-                                    q_, qdot_,
+                                    q_, qdot_LPF,
                                     M_, M_inv_, G_, 
                                     base_contact_Jac, base_contact_Jac_dot, base_contact_lambda, base_contact_Jac_inv_T, base_contact_N, 
                                     base_task_lambda, base_task_Jac_T, base_task_N, base_task_F,
@@ -120,7 +122,7 @@ void CustomController::computeSlow()
             Eigen::VectorQd torque_unbound; torque_unbound.setZero();
             bool qp_status = true;
             // torque_unbound = torque_impedance;  
-            // torque_unbound = dyn_wbc_.computeNominalTorque();
+            torque_unbound = dyn_wbc_.computeNominalTorque();
             qp_status = dyn_wbc_.computeDynamicWBC(wbd_dynamic_task, torque_unbound);
 
             //--- Torque saturation
@@ -262,23 +264,23 @@ void CustomController::loadParams()
     }
 
     //--- Task Gain
-    task_Kp[base_link_name]  = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[chest_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[head_link_name]  = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[lfoot_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[rfoot_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[lhand_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[rhand_link_name] = 400.0 * Eigen::Vector3d::Ones();
-    task_Kp[com_name]        = 400.0 * Eigen::Vector3d::Ones();
+    task_Kp[base_link_name]  = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[chest_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[head_link_name]  = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[lfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[rfoot_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[lhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[rhand_link_name] = 100.0 * Eigen::Vector3d::Ones();
+    task_Kp[com_name]        = 100.0 * Eigen::Vector3d::Ones();
 
-    task_Kv[base_link_name]  = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[chest_link_name] = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[head_link_name]  = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[lfoot_link_name] = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[rfoot_link_name] = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[lhand_link_name] = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[rhand_link_name] = 40.0 * Eigen::Vector3d::Ones();
-    task_Kv[com_name]        = 40.0 * Eigen::Vector3d::Ones();
+    task_Kv[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[chest_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[head_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_Kv[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 }
 
 void CustomController::moveInitialPose()
@@ -333,8 +335,8 @@ void CustomController::stateManager()
     }
 
     //--- Robot States
-    Eigen::Vector3d base_pos = rd_.link_[Pelvis].xpos; 
-    Eigen::Matrix3d base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[Pelvis].rotm)(2)); 
+    Eigen::Vector3d base_pos = rd_.link_[link_index_map[base_link_name]].xpos; 
+    Eigen::Matrix3d base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[link_index_map[base_link_name]].rotm)(2)); 
     for (const auto& [name, idx] : link_index_map)
     {
         //--- Global frame
@@ -437,9 +439,71 @@ void CustomController::stateManager()
     qdot_.segment(0,3) = base_ee_v[base_link_name];
     qdot_.segment(3,3) = base_ee_w[base_link_name];
     qdot_.segment(6,MODEL_DOF) = rd_.q_dot_;
+    for (int i = 0; i < MODEL_DOF_VIRTUAL; i++)
+    {
+        qdot_LPF(i) = DyrosMath::lpf(qdot_(i), qdot_LPF(i), 2000.0, 10.0);
+    }
     
     RigidBodyDynamics::NonlinearEffects(model_, base_q_virtual_, qdot_, G_temp_);
     G_ = G_temp_;
+
+    // std::cout << "M_.eigenvalues(): " << M_.eigenvalues() << std::endl;
+    // std::cout << "G_.lpNorm<1>() : " << G_.lpNorm<1>() << std::endl;
+
+    Eigen::Matrix6d  M_11; M_11.setZero();
+    Eigen::MatrixXd  M_12; M_12.setZero(6, MODEL_DOF);
+    Eigen::MatrixXd  M_21; M_21.setZero(MODEL_DOF, 6);
+    Eigen::MatrixQQd M_22; M_22.setZero();
+    Eigen::MatrixQQd M_u; M_u.setZero();
+    
+    M_11 = M_.topLeftCorner(6, 6);
+    M_12 = M_.topRightCorner(6, MODEL_DOF);
+    M_21 = M_.bottomLeftCorner(MODEL_DOF, 6);
+    M_22 = M_.bottomRightCorner(MODEL_DOF, MODEL_DOF);
+
+    M_u = M_22 - M_21 * M_11.llt().solve(MatrixXd::Identity(6, 6)) * M_12;
+
+    // std::cout << "M_u.eigenvalues()" << std::endl;
+    // std::cout << M_u.eigenvalues() << std::endl;
+
+    Eigen::Vector6d G_1; G_1.setZero();
+    Eigen::VectorQd G_2; G_2.setZero();
+    Eigen::VectorQd G_u; G_u.setZero();
+
+    G_1 = G_.head(6);
+    G_2 = G_.tail(MODEL_DOF);
+    G_u = G_2 - M_21 * M_11.llt().solve(MatrixXd::Identity(6, 6)) * G_1;
+    // std::cout << "G_u.lpNorm<G_u>() : " << G_u.lpNorm<2>() << std::endl;
+
+
+    // --- Reachability
+    struct ReachPair {
+        std::string name_A; std::string name_B; double max_dist{0.0};
+    };
+
+    const std::vector<ReachPair> reach_pairs = {
+        {lshoulder_link_name, lhand_link_name, 0.65},
+        {rshoulder_link_name, rhand_link_name, 0.65},
+    };
+
+    const int m = static_cast<int>(reach_pairs.size());
+
+    std::vector<Eigen::MatrixXd> J_reachability; J_reachability.reserve(m);                
+    std::vector<double> h_reachability; h_reachability.reserve(m);
+
+    for (int i = 0; i < m; ++i) {
+        const auto& pr = reach_pairs[i];
+        const int idA = link_index_map.at(pr.name_A);
+        const int idB = link_index_map.at(pr.name_B);
+
+        Eigen::MatrixXd J_; 
+        double dist_bwt_linkA_linkB = getSignedDistanceFunction(rd_.link_[idA], rd_.link_[idB], J_);
+
+        J_reachability.push_back(-J_);
+        h_reachability.push_back(-dist_bwt_linkA_linkB + pr.max_dist);
+    }
+
+    dyn_wbc_.getReachabilityConstraints(J_reachability, h_reachability);
 }
 
 void CustomController::contactStateManager()
@@ -1042,6 +1106,36 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
         is_left_contact_transition = true;  // Update state transition next tick
     }
 }
+
+//--- Signed Distance Function
+double CustomController::getSignedDistanceFunction(LinkData &linkA_, LinkData &linkB_, Eigen::MatrixXd &J_AB)
+{   
+    // Initialization
+    double sd_AB = 0.0;
+
+    Eigen::Vector3d posA_transform_current_from_global_; posA_transform_current_from_global_.setZero();
+    Eigen::Vector3d posB_transform_current_from_global_; posB_transform_current_from_global_.setZero();
+
+    // Base Coordinate
+    Eigen::Vector3d base_pos = rd_.link_[link_index_map[base_link_name]].xpos; 
+    Eigen::Matrix3d base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[link_index_map[base_link_name]].rotm)(2)); 
+
+    posA_transform_current_from_global_ = base_rot.transpose() * (linkA_.xpos - base_pos);
+    posB_transform_current_from_global_ = base_rot.transpose() * (linkB_.xpos - base_pos);
+
+    std::cout << (posA_transform_current_from_global_ - posB_transform_current_from_global_).norm() << std::endl;
+
+    sd_AB = (posA_transform_current_from_global_ - posB_transform_current_from_global_).norm(); 
+
+    Eigen::Vector3d normal_vector_btw_AB; normal_vector_btw_AB.setZero();
+    normal_vector_btw_AB = (posA_transform_current_from_global_ - posB_transform_current_from_global_) / (posA_transform_current_from_global_ - posB_transform_current_from_global_).norm();
+
+    J_AB.setZero(1, MODEL_DOF_VIRTUAL);
+    J_AB = normal_vector_btw_AB.transpose() * base_rot.transpose() * (linkA_.Jac().topRows(3) - linkB_.Jac().topRows(3));
+
+    return sd_AB;
+}
+
 
 //--- Joy Utils
 void CustomController::xBoxJoyCallback(const sensor_msgs::Joy::ConstPtr& joy)

@@ -60,6 +60,7 @@ public:
 
     //--- Robot Model
     RigidBodyDynamics::Model model_;  
+    LinkData link_cc_[LINK_NUMBER + 1];
     KinWBC kin_wbc_;  
     DynWBC dyn_wbc_;  
     std::vector<std::vector<TaskInfo>> kin_task_hierarchy;
@@ -88,6 +89,7 @@ public:
     void contactStateManager();
     void taskStateManager();
     void saveInitialState();
+    double getSignedDistanceFunction(LinkData &linkA_, LinkData &linkB_, Eigen::MatrixXd &J_AB);
     
     std::string base_link_name  = "Pelvis_Link";
     std::string chest_link_name = "Upperbody_Link";
@@ -95,6 +97,8 @@ public:
     std::string rfoot_link_name = "R_Foot_Link";
     std::string lhand_link_name = "L_Wrist2_Link";
     std::string rhand_link_name = "R_Wrist2_Link";
+    std::string lshoulder_link_name = "L_Shoulder1_Link";
+    std::string rshoulder_link_name = "R_Shoulder1_Link";
     std::string head_link_name  = "Head_Link";
     std::string com_name        = "COM_id";
 
@@ -105,8 +109,21 @@ public:
         {rfoot_link_name, 15},
         {lhand_link_name, 23},
         {rhand_link_name, 31},
+        {lshoulder_link_name, 16},
+        {rshoulder_link_name, 24},
         {head_link_name, 33},
         {com_name, 34}
+    };
+
+    std::map<std::string, int> link_urdf_id_map = {   
+        {base_link_name, 2},
+        {chest_link_name, 17},
+        {lfoot_link_name, 8},
+        {rfoot_link_name, 14},
+        {lhand_link_name, 25},
+        {rhand_link_name, 35},
+        {head_link_name, 27},
+        {com_name, 0}
     };
 
     // Robot state w.r.t. global frame
@@ -186,7 +203,7 @@ public:
     std::map<std::string, Eigen::Vector6d> wrench_desired;
     std::map<std::string, Eigen::Vector3d> task_Kp; 
     std::map<std::string, Eigen::Vector3d> task_Kv; 
-    Eigen::VectorVQd q_, qdot_;
+    Eigen::VectorVQd q_, qdot_, qdot_LPF;
     Eigen::VectorVQd q_des, dq_des, qdot_des, qddot_des;
     Eigen::VectorQd torque_transition;
 

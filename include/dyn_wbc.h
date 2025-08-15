@@ -64,6 +64,13 @@ public:
                         const Eigen::VectorXd &F_task_,
                         const Eigen::VectorQd &torque_impedance_);
 
+    void getReachabilityConstraints(const std::vector<Eigen::MatrixXd> &J_reachability, const std::vector<double> &h_reachability);
+    std::vector<Eigen::MatrixXd> Hess_reachability_;       
+    std::vector<Eigen::MatrixXd> Hess_reachability_prev_;       
+    std::vector<Eigen::MatrixXd> grad_reachability_;       
+    std::vector<Eigen::MatrixXd> grad_reachability_prev_;  
+    std::vector<double>          cbf_reachability_;        
+
     Eigen::MatrixXd Hess;  // HESSIAN
     Eigen::VectorXd grad;  // GRADIENT
     Eigen::MatrixXd A_const;    
@@ -90,7 +97,8 @@ private:
 
     double alpha1 = 100.0;
     double alpha2 = 100.0;
-    double alpha3 = 10.0;
+    double alpha3 = 10000.0;
+    double alpha4 = 10000.0;
 
     //--- Local eigen variables
     Eigen::MatrixVVd M; 
@@ -99,6 +107,7 @@ private:
     Eigen::MatrixXd A; 
     Eigen::VectorVQd q;
     Eigen::VectorVQd qdot;
+    Eigen::VectorVQd q_prev;
 
     Eigen::VectorQd torque_lim;
     Eigen::VectorQd q_pos_l_lim;
@@ -116,8 +125,13 @@ private:
     Eigen::MatrixXd J_contact_inv_T;
     Eigen::VectorXd F_contact; 
     Eigen::VectorXd F_gravity; 
-    Eigen::MatrixXd J_fric;
+
+    Eigen::MatrixXd A_fric;
     Eigen::VectorXd ubA_fric;
+    Eigen::MatrixXd A_reachability;
+    Eigen::VectorXd lbA_reachability;
+    Eigen::VectorXd ubA_reachability;
+
     Eigen::VectorQd torque_nominal;
 
     Eigen::VectorQd W_torque;

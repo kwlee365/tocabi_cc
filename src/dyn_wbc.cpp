@@ -151,7 +151,7 @@ void DynWBC::setWbcWeights(const Eigen::VectorQd& W_torque_,
     W_contact = W_contact_;
 
     //--- Print
-    static bool weight_checker = false;
+    static bool weight_checker = true;
     if(weight_checker == true)
     {
         std::cout << "\n====== W_torque ======" << std::endl;
@@ -220,6 +220,18 @@ void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>> &wbd_dynami
                             const Eigen::VectorQd &torque_impedance_) 
 {
     //--- Robot States
+    static bool is_state_init = true;
+    q_prev = q;
+
+    if(is_state_init == true)
+    {
+        q_prev.setZero();
+        q_prev = q_;
+
+        is_state_init = false;
+        std::cout << "getRobotStates()" << std::endl;
+    }
+
     q = q_;
     qdot = qdot_;
 
@@ -289,18 +301,18 @@ void DynWBC::getRobotStates(const std::vector<std::vector<TaskInfo>> &wbd_dynami
 
     if(contact_mode_local == ContactIndicator::DoubleSupport)
     {
-        J_fric.setZero(32, MODEL_DOF);
+        A_fric.setZero(32, MODEL_DOF);
         ubA_fric.setZero(32);
 
-        J_fric = (-1.0) * U_fric_dsp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
+        A_fric = (-1.0) * U_fric_dsp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
         ubA_fric = U_fric_dsp * (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_ - base_contact_Jac_inv_T_ * Grav_);
     }
     else if(contact_mode_local == ContactIndicator::LeftSingleSupport || contact_mode_local == ContactIndicator::RightSingleSupport)
     {
-        J_fric.setZero(16, MODEL_DOF);
+        A_fric.setZero(16, MODEL_DOF);
         ubA_fric.setZero(16);
 
-        J_fric = (-1.0) * U_fric_ssp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
+        A_fric = (-1.0) * U_fric_ssp * (base_contact_Jac_inv_T_.rightCols(MODEL_DOF));
         ubA_fric = U_fric_ssp * (base_contact_lambda_ * base_contact_Jac_dot_ * qdot_ - base_contact_Jac_inv_T_ * Grav_);
     }
 }
@@ -311,7 +323,7 @@ void DynWBC::calcCostHess(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_
 
     Hess += W_torque.asDiagonal(); 
 
-    // Hess += J_contact_inv_T.transpose() * W_contact.asDiagonal() * J_contact_inv_T; 
+    Hess += J_contact_inv_T.transpose() * W_contact.asDiagonal() * J_contact_inv_T; 
 
     Hess += W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * A);
 }
@@ -322,7 +334,7 @@ void DynWBC::calcCostGrad(const std::vector<std::vector<TaskInfo>>& wbd_dynamic_
 
     grad -= W_torque.asDiagonal() * torque_impedance;
 
-    // grad -= J_contact_inv_T.transpose() * W_contact.asDiagonal() * F_contact;
+    grad -= J_contact_inv_T.transpose() * W_contact.asDiagonal() * F_contact;
 
     grad -= W_energy.asDiagonal() * (A.transpose() * M_inv.transpose() * G);
 }
@@ -340,36 +352,136 @@ void DynWBC::calcInequalityConstraint()
     // Eigen::VectorQd ubA_torque; ubA_torque = (+1.0) * torque_lim;
     // constraints_.push_back({A_torque, lbA_torque, ubA_torque});   // --- Torque Boundary (Size 33)
 
-    // // //--- (2) Joint position constraints
-    Eigen::MatrixQQd A_qpos; A_qpos = (M_inv * A).bottomRows(MODEL_DOF);
-    Eigen::VectorQd lbA_qpos; lbA_qpos = alpha1 * alpha2 * (q_pos_l_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
-    Eigen::VectorQd ubA_qpos; ubA_qpos = alpha1 * alpha2 * (q_pos_h_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
-    constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
+    //--- (2) Joint position constraints
+    // Eigen::MatrixQQd A_qpos; A_qpos = (M_inv * A).bottomRows(MODEL_DOF);
+    // Eigen::VectorQd lbA_qpos; lbA_qpos = alpha1 * alpha2 * (q_pos_l_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
+    // Eigen::VectorQd ubA_qpos; ubA_qpos = alpha1 * alpha2 * (q_pos_h_lim - q.tail(MODEL_DOF)) - (alpha1 + alpha2) * qdot.tail(MODEL_DOF) + (M_inv * G).tail(MODEL_DOF);
+    // constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
 
-    // // //--- (3) Friction cone constraints
+    Eigen::MatrixQQd A_qpos;   A_qpos.setZero();
+    Eigen::VectorQd  lbA_qpos; lbA_qpos.setZero();
+    Eigen::VectorQd  ubA_qpos; ubA_qpos.setZero();
+    Eigen::VectorQd  qdot_a; qdot_a = qdot.tail(MODEL_DOF);
+    Eigen::VectorQd  q_a; q_a = q.tail(MODEL_DOF);
+    double qdot_norm = qdot.norm();
+    double cu  = 20.0;    // larger than upperbound of Gravity vector
+    double alpha = 100.0;
+    double alpha_e = 1000.0;
+
+    A_qpos = (qdot.tail(MODEL_DOF).transpose() / alpha_e).replicate(MODEL_DOF, 1);
+    for (int i = 0; i < MODEL_DOF; i++)
+    {
+        // ubA_qpos(i) = qdot.transpose() * G + alpha_e * qdot_a(i) + alpha * (-qdot.transpose() * M * qdot + alpha_e * (q_a(i) - q_pos_l_lim(i)));
+        ubA_qpos(i) = + (qdot_a(i) + alpha * (q_a(i) - q_pos_l_lim(i))) - (cu  / alpha_e) * qdot_norm *(1.0 + alpha * qdot_norm); 
+    }
+    constraints_.push_back({
+        A_qpos, 
+        Eigen::VectorXd::Constant(A_qpos.rows(), -std::numeric_limits<double>::infinity()),
+        ubA_qpos}); 
+
+    A_qpos = (qdot.tail(MODEL_DOF).transpose() / alpha_e).replicate(MODEL_DOF, 1);
+    for (int i = 0; i < MODEL_DOF; i++)
+    {
+        // ubA_qpos(i) = qdot.transpose() * G - alpha_e * qdot_a(i) + alpha * (-qdot.transpose() * M * qdot + alpha_e * (q_pos_h_lim(i) - q_a(i)));
+        ubA_qpos(i) = - (qdot_a(i) + alpha * (q_a(i) - q_pos_h_lim(i))) - (cu  / alpha_e) * qdot_norm *(1.0 + alpha * qdot_norm) ; 
+    }
+    constraints_.push_back({
+        A_qpos, 
+        Eigen::VectorXd::Constant(A_qpos.rows(), -std::numeric_limits<double>::infinity()),
+        ubA_qpos}); 
+
+        
+    //--- (3) Friction cone constraints
     constraints_.push_back({   
-        J_fric,
-        Eigen::VectorXd::Constant(J_fric.rows(), -std::numeric_limits<double>::infinity()),
+        A_fric,
+        Eigen::VectorXd::Constant(A_fric.rows(), -std::numeric_limits<double>::infinity()),
         ubA_fric
     });
 
-    // constraints_.push_back({   
-    //     A_LF_fric_min,
-    //     Eigen::VectorXd::Constant(A_LF_fric_min.rows(), -std::numeric_limits<double>::infinity()),
-    //     Eigen::VectorXd::Zero(A_LF_fric_min.rows())
-    // });
+    //--- (4) Reachability constraints
+    const int m = static_cast<int>(Hess_reachability_.size()); 
+    A_reachability.setZero(m, MODEL_DOF);
+    lbA_reachability.setZero(m);
 
-    // constraints_.push_back({   
-    //     A_RF_fric_max,
-    //     Eigen::VectorXd::Constant(A_RF_fric_max.rows(), -std::numeric_limits<double>::infinity()),
-    //     Eigen::VectorXd::Zero(A_RF_fric_max.rows())
-    // });
+    for (int i = 0; i < m; ++i) {
+            A_reachability.block(i, 0, 1, MODEL_DOF) = grad_reachability_[i] * M_inv * A;
+            lbA_reachability(i) = 
+                                + (-1.0) * ( qdot.transpose() * Hess_reachability_[i] * qdot)(0) 
+                                + (-1.0) * ((alpha3 + alpha4) * grad_reachability_[i] * qdot)(0) 
+                                + (-1.0) * ( alpha3 * alpha4 * cbf_reachability_[i]);
+                                + (+1.0) * (grad_reachability_[i] * M_inv * G)(0);
+    }
 
-    // constraints_.push_back({    
-    //     A_RF_fric_min,
-    //     Eigen::VectorXd::Constant(A_RF_fric_min.rows(), -std::numeric_limits<double>::infinity()),
-    //     Eigen::VectorXd::Zero(A_RF_fric_min.rows())
-    // });
+    // const int m = static_cast<int>(Hess_reachability_.size()); 
+    // A_reachability.setZero(m, MODEL_DOF);
+    // ubA_reachability.setZero(m);
+
+    // A_reachability = (qdot.tail(MODEL_DOF).transpose() / alpha_e).replicate(m, 1);
+    // for (int i = 0; i < m; ++i) {
+    //         // ubA_qpos(i) = - cu * qdot_norm *(1.0 + alpha * qdot_norm) + alpha_e * ((grad_reachability_[i] * qdot)(0) + alpha * cbf_reachability_[i]); 
+    //     ubA_reachability(i) =  ((grad_reachability_[i] * qdot)(0) + alpha * cbf_reachability_[i]) - (cu  / alpha_e) * qdot_norm *(1.0 + alpha * qdot_norm) ; 
+    // }
+
+    constraints_.push_back({   
+        A_reachability,
+        Eigen::VectorXd::Constant(A_reachability.rows(), -std::numeric_limits<double>::infinity()),
+        ubA_reachability
+    });
+
+}
+
+void DynWBC::getReachabilityConstraints(const std::vector<Eigen::MatrixXd> &J_reachability_, const std::vector<double> &h_reachability_)
+{
+    const int m = static_cast<int>(J_reachability_.size()); 
+    if (m == 0) return;
+    assert(m == static_cast<int>(h_reachability_.size()) && "Reachability Constraints's Hessian and gradients size mismatch");
+
+    const int n = static_cast<int>(J_reachability_[0].cols());
+    for (int i = 0; i < m; ++i) {
+        assert(J_reachability_[i].rows() == 1 && J_reachability_[i].cols() == n && "J_i must be 1 x n");
+    }
+
+
+    static bool is_reach_init_ = true;
+    if (is_reach_init_ == true) 
+    {
+        Hess_reachability_.assign(m, Eigen::MatrixXd::Identity(n, n));
+        Hess_reachability_prev_.assign(m, Eigen::MatrixXd::Identity(n, n));
+        grad_reachability_.assign(m, Eigen::MatrixXd::Zero(1, n));
+        grad_reachability_prev_.assign(m, Eigen::MatrixXd::Zero(1, n));
+        cbf_reachability_.assign(m, 0.0); 
+
+        for (int i = 0; i < m; ++i) {
+            grad_reachability_prev_[i] = J_reachability_[i];
+        }
+
+        is_reach_init_ = false;
+    }
+
+    Eigen::VectorXd s; s.setZero(n);
+    s = q - q_prev;
+
+    for (int i = 0; i < m; ++i) {
+
+        grad_reachability_[i] = J_reachability_[i];
+        cbf_reachability_[i]  = h_reachability_[i];
+
+        // BFGS Update
+        Eigen::MatrixXd y; y.setZero(1, n);
+        y = grad_reachability_[i] - grad_reachability_prev_[i];
+
+        double rho = 1.0 / (y * s)(0);
+
+        Hess_reachability_[i] = Hess_reachability_prev_[i] 
+                              + rho * (y.transpose() * y) 
+                              - (1.0 / (s.transpose() * Hess_reachability_prev_[i] * s)(0)) * (Hess_reachability_prev_[i] * s * s.transpose() * Hess_reachability_prev_[i]);
+
+        Hess_reachability_prev_[i] = (y * s)(0) / (y * y.transpose())(0) * Eigen::MatrixXd::Identity(n, n);
+
+        // Previous gradient update 
+        grad_reachability_prev_[i] = grad_reachability_[i];
+    }
+
 }
 
 void DynWBC::checkGradHessSize()
