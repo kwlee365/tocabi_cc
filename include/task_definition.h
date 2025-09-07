@@ -14,3 +14,9 @@ enum class ContactIndicator {
     LeftSingleSupport,
     RightSingleSupport
 };
+
+struct ConstraintMatrix {
+    Eigen::MatrixXd A;
+    Eigen::VectorXd lbA;
+    Eigen::VectorXd ubA;
+};

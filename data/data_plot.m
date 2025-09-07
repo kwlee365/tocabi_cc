@@ -2,38 +2,17 @@ clc
 clear all
 close all
 
-dataWBC = readmatrix('dataWBC1.txt');
-torque_qp = dataWBC(:, 1:33);
-dataCC = readmatrix('dataCC6.txt');
-torque = dataWBC(:, 1:33);
-
-
+dataWBC = readmatrix('dataCC6.txt');
+torque_sol = dataWBC(:, 1:33);
 
 figure()
-title('leg torque')
-start_cnt = 0;
-for cnt = 1:1:6
-    plot(torque_qp(:,start_cnt + cnt));
+sgtitle('torque')
+for cnt = 1:1:12
+% cnt = 10
+    plot(torque_sol(:,cnt))      % sol
     hold on
-    plot(torque(:,start_cnt + cnt));
     legend()
-end 
-
-figure()
-title('arm torque')
-start_cnt = 15;
-for cnt = 1:1:7
-    plot(torque_qp(:,start_cnt + cnt));
-    hold on
-    plot(torque(:,start_cnt + cnt));
-
-    legend()
-
-end 
-    plot(torque_qp(:,start_cnt + 8),'k');
-    plot(torque(:,start_cnt + 8));
-
-
+end
 
 %%
 clc
@@ -41,28 +20,43 @@ clear all
 close all
 
 dataCC = readmatrix('dataCC1.txt');
-base_pos = dataCC(:, 1:6);
+com_pos = dataCC(:, 1:6);
 dataCC = readmatrix('dataCC2.txt');
-lhand_pos = dataCC(:, 1:6);
+dcm_pos = dataCC(:, 1:6);
 dataCC = readmatrix('dataCC3.txt');
-rfoot_pos = dataCC(:, 1:6);
+zmp_pos = dataCC(:, 1:6);
 dataCC = readmatrix('dataCC4.txt');
-lhand_rot = dataCC(:, 1:6);
-% dataCC = readmatrix('dataCC5.txt');
-% base_rot = dataCC(:, 1:6);
+foot_pos = dataCC(:, 1:6);
+lfoot_pos = foot_pos(:, 1:3);
+rfoot_pos = foot_pos(:, 4:6);
 
+% figure()
+% start_cnt = 0;
+% for cnt = 1:1:3
+%     subplot(3,1,cnt)
+%     plot(dcm_pos(:, start_cnt + cnt));
+%     hold on
+%     plot(dcm_pos(:, start_cnt + cnt + 3));
+%     plot(zmp_pos(:, start_cnt + cnt))
+%     plot(zmp_pos(:, start_cnt + cnt + 3))
+%     plot(lfoot_pos(:, cnt));
+%     plot(rfoot_pos(:, cnt));
+% 
+%     legend('dcm des', 'dcm mea', 'zmp ref', 'zmp des', 'lfoot', 'rfoot')
+% end
 
 figure()
 start_cnt = 0;
 for cnt = 1:1:3
     subplot(3,1,cnt)
-    plot(lhand_pos(:,start_cnt + cnt));
+    plot(com_pos(:,start_cnt + cnt));
     hold on
-    plot(lhand_pos(:,start_cnt + cnt + 3 ));
+    plot(com_pos(:,start_cnt + cnt + 3 ));
+    plot(zmp_pos(:, start_cnt + cnt))
+    plot(zmp_pos(:, start_cnt + cnt + 3))
 
-    legend('des', 'mea')
+    legend('com des', 'com mea', 'zmp ref', 'zmp des')
 end
-
 %%
 clc
 clear all
