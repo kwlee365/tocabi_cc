@@ -72,8 +72,10 @@ public:
 
     Eigen::VectorXd Kp; Eigen::MatrixXd Kp_diag;
     Eigen::VectorXd Kd; Eigen::MatrixXd Kd_diag;
+    Eigen::VectorXd Ki; Eigen::MatrixXd Ki_diag;
     Eigen::VectorXd Kp_virtual; Eigen::MatrixVVd Kp_virtual_diag;
     Eigen::VectorXd Kd_virtual; Eigen::MatrixVVd Kd_virtual_diag;
+    Eigen::VectorXd Ki_virtual; Eigen::MatrixVVd Ki_virtual_diag;
     Eigen::VectorQd joint_pos_limit_l_;
     Eigen::VectorQd joint_pos_limit_h_;
     Eigen::VectorQd joint_vel_limit_l_;
@@ -178,9 +180,8 @@ public:
     Eigen::VectorVQd G_;
     Eigen::MatrixXd S_T;
     Eigen::MatrixXd S;  
-    Eigen::VectorXd contact_wrench;
-    Eigen::Vector6d lfoot_contact_wrench;
-    Eigen::Vector6d rfoot_contact_wrench;
+    Eigen::VectorXd contact_wrench_qp;
+    Eigen::VectorVQd qddot_qp;
     //---
 
     //--- Initial Values

@@ -67,9 +67,9 @@ void CustomController::computeSlow()
                 saveInitialState();
                 dyn_wbc_.setRobotSystemParameters(0.8,                  // Friction Coefficient
                                                   0.3,                  // Foot size
-                                                  0.16,                 // Foot width
-                                                  rd_.torque_limit);    // Torque limit
+                                                  0.16);                // Foot width
 
+                        
                 cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
                 cout << "TIME: "<< rd_.control_time_ << endl; 
 
@@ -79,7 +79,9 @@ void CustomController::computeSlow()
             contactStateManager();
 
             motion_mode_ = TestMotionType::PelvHand;
-            runTestMotion(5.0, 0.1, 0.1, 0.2, 0.6);
+            // runTestMotion(2.0, 0.05, 0.0, 0.2, 0.6); // PelvHand (sine)
+            runTestMotion(5.0, 0.10, 0.5, 0.2, 0.6); // PelvHand
+            // runTestMotion(5.0, 0.12, 0.5, 0.2, 0.6);    // Taichi
 
             //--- Whole-body Inverse Kinematics
             kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
@@ -95,9 +97,6 @@ void CustomController::computeSlow()
             q_des += qdot_des / hz_;
             rd_.q_desired = q_des.tail(MODEL_DOF);
 
-            // Eigen::VectorQd torque_impedance; torque_impedance.setZero();
-            // torque_impedance =  Kd_diag * (qdot_des.tail(MODEL_DOF) - rd_.q_dot_) + Kp_diag * (q_des.tail(MODEL_DOF) - rd_.q_);
-            
             qddot_des.setZero();
             qddot_des =  Kd_virtual_diag * (qdot_des - qdot_) + Kp_virtual_diag * (q_des - q_);
             qddot_des.segment(3,3) =  Kd_virtual_diag.block(3,3,3,3) * (qdot_des.segment(3,3) - qdot_.segment(3,3)) 
@@ -114,9 +113,10 @@ void CustomController::computeSlow()
 
             Eigen::VectorQd torque_unbound; torque_unbound.setZero();
             bool qp_status = true;
-            qp_status = dyn_wbc_.computeDynamicWBC(contact_wrench);
+            qddot_qp.setZero(); contact_wrench_qp.setZero(contact_dim);
+            qp_status = dyn_wbc_.computeDynamicWBC(qddot_qp, contact_wrench_qp);
             // torque_unbound =  qddot_des.tail(MODEL_DOF);
-            torque_unbound = (M_ * qddot_des + G_ - base_contact_Jac.transpose() * contact_wrench + base_contact_N * S_T * qddot_des.tail(MODEL_DOF)).tail(MODEL_DOF); 
+            torque_unbound = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF); 
 
             //--- Torque initialization
             static int tick_torque_desired_init = 0;
@@ -182,14 +182,6 @@ void CustomController::computeSlow()
         rd_.torque_desired = (Kp_diag * (rd_.q_desired - rd_.q_)) - (Kd_diag * rd_.q_dot_);
     }
 
-    static int tick_print = 0;
-    if(tick_print % 1000 == 0)
-    {
-        std::cout << "rd_.torque_desired: " << rd_.torque_desired.segment(0,12).transpose() << std::endl;
-
-    }
-    tick_print++;
-
     dataCC5 << where_am_i << std::endl;
     dataCC6 << rd_.torque_desired.transpose() << std::endl;
 }
@@ -211,15 +203,18 @@ void CustomController::loadParams()
 {
     Kp.setZero(MODEL_DOF); Kp_diag.setZero(MODEL_DOF, MODEL_DOF);         
     Kd.setZero(MODEL_DOF); Kd_diag.setZero(MODEL_DOF, MODEL_DOF);
+    Ki.setZero(MODEL_DOF); Ki_diag.setZero(MODEL_DOF, MODEL_DOF);
     Kp_virtual.setZero(MODEL_DOF_VIRTUAL); Kp_virtual_diag.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL);         
     Kd_virtual.setZero(MODEL_DOF_VIRTUAL); Kd_virtual_diag.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL);
+    Ki_virtual.setZero(MODEL_DOF_VIRTUAL); Ki_virtual_diag.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL);
 
-    std::vector<double> kp_vec, kd_vec;
+    std::vector<double> kp_vec, kd_vec, ki_vec;
     std::vector<double> pos_low_deg, pos_high_deg;
     std::vector<double> vel_low, vel_high;
 
     nh_cc_.getParam("/tocabi_controller/joint_gains/Kp", kp_vec);
     nh_cc_.getParam("/tocabi_controller/joint_gains/Kd", kd_vec);
+    nh_cc_.getParam("/tocabi_controller/joint_gains/Ki", ki_vec);
     nh_cc_.getParam("/tocabi_controller/joint_limits/pos_low_deg", pos_low_deg);
     nh_cc_.getParam("/tocabi_controller/joint_limits/pos_high_deg", pos_high_deg);
     nh_cc_.getParam("/tocabi_controller/joint_limits/vel_low", vel_low);
@@ -233,6 +228,10 @@ void CustomController::loadParams()
     if (kd_vec.size() != MODEL_DOF_VIRTUAL)
         ROS_ERROR("Kd vector size mismatch: got %lu, expected %d", kd_vec.size(), MODEL_DOF_VIRTUAL);
     assert(kd_vec.size() == MODEL_DOF_VIRTUAL);
+
+    if (ki_vec.size() != MODEL_DOF_VIRTUAL)
+        ROS_ERROR("Ki vector size mismatch: got %lu, expected %d", ki_vec.size(), MODEL_DOF_VIRTUAL);
+    assert(ki_vec.size() == MODEL_DOF_VIRTUAL);
 
     if (pos_low_deg.size() != MODEL_DOF)
         ROS_ERROR("Joint position lower limit vector size mismatch: got %lu, expected %d", pos_low_deg.size(), MODEL_DOF);
@@ -255,18 +254,22 @@ void CustomController::loadParams()
     {
         Kp_virtual(i) = kp_vec[i];
         Kd_virtual(i) = kd_vec[i];
+        Ki_virtual(i) = ki_vec[i];
 
         if(i >= 6)
         {
             Kp(i - 6) = kp_vec[i];
             Kd(i - 6) = kd_vec[i];
+            Ki(i - 6) = ki_vec[i];
         }
     }
 
     Kp_virtual_diag = Kp_virtual.asDiagonal();
     Kd_virtual_diag = Kd_virtual.asDiagonal();
+    Ki_virtual_diag = Ki_virtual.asDiagonal();
     Kp_diag = Kp.asDiagonal();
     Kd_diag = Kd.asDiagonal();
+    Ki_diag = Ki.asDiagonal();
 
     // Position Limits (convert deg to rad)
     for (int i = 0; i < MODEL_DOF; ++i)
@@ -290,7 +293,7 @@ void CustomController::loadParams()
     task_pos_Kp[rfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[lhand_link_name] = 1.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[rhand_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
+    task_pos_Kp[com_name]        = 0.3 * Eigen::Vector3d::Ones();
 
     task_ori_Kp[base_link_name]  = 1.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
@@ -591,9 +594,6 @@ void CustomController::saveInitialState()
         support_R_desired[name]   = init_support_ee_rot[name];
         support_w_desired[name]   = Eigen::Vector3d::Zero();
         support_dw_desired[name]  = Eigen::Vector3d::Zero();
-        
-        lfoot_contact_wrench.setZero();
-        rfoot_contact_wrench.setZero();
     }
 
     q_des.segment(6, MODEL_DOF)= q_init_des;
@@ -671,6 +671,16 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
                                                          init_support_ee_pos[com_name](1), 
                                                          init_support_ee_pos[com_name](1) + pelv_dist, 
                                                          0.0, 0.0);
+    // static int tick_pelv = 0;
+    // double T = traj_time; // period
+    // double wn = (2.0 * M_PI) / T;
+    // if(is_torque_desired_init == false)
+    // {
+    //     x_desired[com_name](1)   = init_support_ee_pos[com_name](1) + pelv_dist * sin(wn * tick_pelv / hz_);                                          
+    //     dx_desired[com_name](1)  = wn * pelv_dist * cos(wn * tick_pelv / hz_);                                          
+    //     ddx_desired[com_name](1) = (-1.0) * wn * wn * pelv_dist * sin(wn * tick_pelv / hz_);                                          
+    //     tick_pelv++;
+    // }
 
     //--- Hand Test
     for (int idx = 2; idx < 3; idx++)

@@ -23,14 +23,14 @@ public:
     //--- QP WBC 
     CQuadraticProgram QP_Dyn_Wbc;
 
-    bool computeDynamicWBC(Eigen::VectorXd& contact_wrench);
+    bool computeDynamicWBC(Eigen::VectorVQd&qddot_qp, Eigen::VectorXd& contact_wrench);
     void calcCostGrad();
     void calcCostHess();
     void calcEqualityConstraint();
     void calcInequalityConstraint();
     void checkGradHessSize();
 
-    void setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_, const Eigen::VectorQd& torque_lim_);
+    void setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_);
     void updateContactState(const ContactIndicator& contactMode);
     void getRobotStates(const Eigen::VectorVQd &q_,
                         const Eigen::VectorVQd &qdot_,
@@ -50,11 +50,14 @@ public:
 
     Eigen::Vector6d base_impedance_cmd;
     Eigen::VectorXd contact_wrench_cmd;
+    Eigen::Vector6d qddot_b_cmd;
+    Eigen::VectorQd qddot_a_cmd;
     Eigen::VectorVQd qddot_cmd;
+    Eigen::VectorXd qddot_sol; 
     Eigen::VectorXd contact_wrench_sol; 
 
 private:
-    int dof_;
+    int dof;
     bool is_gradhess_init_ = true;
     bool is_wbc_init_ = true;
     bool is_cannot_solve_qp_init_ = true;
@@ -69,21 +72,25 @@ private:
     Eigen::VectorVQd G; 
     Eigen::MatrixXd base_contact_Jac;
     Eigen::MatrixXd base_contact_Jac_T;
-    Eigen::MatrixXd S_T;
-    Eigen::MatrixXd S;  
+    Eigen::MatrixXd Sa_T;
+    Eigen::MatrixXd Sa;  
+    Eigen::MatrixXd Sf;  
 
     Eigen::VectorVQd q;
     Eigen::VectorVQd qdot;
-
-    Eigen::VectorQd torque_lim;
 
     Eigen::MatrixXd A_fric;
     Eigen::VectorXd lbA_fric;
     Eigen::VectorXd ubA_fric;
 
+    double W_cwr = 1e-3;
+    double W_qddot_b = 1.0;
+    double W_energy = 1.0;
+
     ContactIndicator contact_mode = ContactIndicator::DoubleSupport;
     ContactIndicator contact_mode_prev = ContactIndicator::DoubleSupport;
     int contact_dim = 0;
+    int base_dim = 6;
 };
 
 #endif  // DYN_WBC_H
