@@ -2,17 +2,19 @@ clc
 clear all
 close all
 
+dataWBC = readmatrix('dataCC5.txt');
+trigger = dataWBC(:, 1);
 dataWBC = readmatrix('dataCC6.txt');
 torque_sol = dataWBC(:, 1:33);
-
 figure()
 sgtitle('torque')
-for cnt = 1:1:12
+for cnt = 1:1:6
 % cnt = 10
-    plot(torque_sol(:,cnt))      % sol
+    plot(torque_sol(:,cnt))    
     hold on
     legend()
 end
+plot(trigger(:,1))
 
 %%
 clc

@@ -6,7 +6,7 @@ ofstream dataCC1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC1.txt");
 ofstream dataCC2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC2.txt");
 ofstream dataCC3("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC3.txt");
 ofstream dataCC4("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC4.txt");
-// ofstream dataCC5("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC5.txt");
+ofstream dataCC5("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC5.txt");
 ofstream dataCC6("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC6.txt");
 
 CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_VIRTUAL),  dyn_wbc_(MODEL_DOF_VIRTUAL)
@@ -32,6 +32,7 @@ Eigen::VectorQd CustomController::getControl()
 void CustomController::computeSlow()
 {
     queue_cc_.callAvailable(ros::WallDuration());
+    int where_am_i = 0;
     
     if (rd_.tc_.mode == 6)
     {   
@@ -56,6 +57,7 @@ void CustomController::computeSlow()
     }
     else if (rd_.tc_.mode == 7)
     {
+        where_am_i = 1;
         if(is_mode_7_working == true)
         {
             stateManager();
@@ -76,7 +78,7 @@ void CustomController::computeSlow()
 
             contactStateManager();
 
-            motion_mode_ = TestMotionType::Taichi;
+            motion_mode_ = TestMotionType::PelvHand;
             runTestMotion(5.0, 0.1, 0.1, 0.2, 0.6);
 
             //--- Whole-body Inverse Kinematics
@@ -116,12 +118,29 @@ void CustomController::computeSlow()
             // torque_unbound =  qddot_des.tail(MODEL_DOF);
             torque_unbound = (M_ * qddot_des + G_ - base_contact_Jac.transpose() * contact_wrench + base_contact_N * S_T * qddot_des.tail(MODEL_DOF)).tail(MODEL_DOF); 
 
+            //--- Torque initialization
+            static int tick_torque_desired_init = 0;
+            if(is_torque_desired_init == true)
+            {
+                for (int i = 0; i < MODEL_DOF; i++) {
+                    torque_unbound(i) = DyrosMath::cubic(tick_torque_desired_init, 0, 2000, torque_init(i), torque_unbound(i), 0.0, 0.0);
+                }
+
+                tick_torque_desired_init++;
+
+                if(tick_torque_desired_init >= 2000) {
+                    is_torque_desired_init = false;
+                    std::cout << "##### INFO: INITIAL TORQUE SMOOTHING COMPLETE #####" << std::endl;
+                }
+            }
+
             //--- Torque saturation
             Eigen::VectorQd torque_bound;   torque_bound.setZero();
             for (int i = 0; i < MODEL_DOF; i++) {
                 torque_bound(i) = DyrosMath::minmax_cut(torque_unbound(i), -rd_.torque_limit(i), rd_.torque_limit(i));
             }
 
+            //--- Torque transition when contact state changes
             static int tick_transition = 0;
             if(is_left_contact_transition == true || is_right_contact_transition == true)
             {
@@ -156,9 +175,6 @@ void CustomController::computeSlow()
                 
                 is_mode_7_working = false;
             }
-
-            dataCC6 << torque_bound.transpose() << std::endl;
-
         }
     }
     else
@@ -166,6 +182,16 @@ void CustomController::computeSlow()
         rd_.torque_desired = (Kp_diag * (rd_.q_desired - rd_.q_)) - (Kd_diag * rd_.q_dot_);
     }
 
+    static int tick_print = 0;
+    if(tick_print % 1000 == 0)
+    {
+        std::cout << "rd_.torque_desired: " << rd_.torque_desired.segment(0,12).transpose() << std::endl;
+
+    }
+    tick_print++;
+
+    dataCC5 << where_am_i << std::endl;
+    dataCC6 << rd_.torque_desired.transpose() << std::endl;
 }
 
 void CustomController::computeFast()
@@ -574,6 +600,8 @@ void CustomController::saveInitialState()
     dq_des.setZero(); 
     qdot_des.setZero();
     qddot_des.setZero(); 
+
+    torque_init = (Kp_diag * (q_init_des - rd_.q_)) - (Kd_diag * rd_.q_dot_);
 }
 
 void CustomController::runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& swing_duration)

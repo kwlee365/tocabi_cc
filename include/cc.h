@@ -200,6 +200,7 @@ public:
     std::map<std::string, Eigen::Vector3d> task_ori_Kp; 
     Eigen::VectorVQd q_, qdot_, qdot_LPF;
     Eigen::VectorVQd q_des, dq_des, qdot_des, qddot_des;
+    Eigen::VectorQd torque_init;
     Eigen::VectorQd torque_transition;
 
     //--- Test Function
