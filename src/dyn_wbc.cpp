@@ -147,6 +147,7 @@ void DynWBC::updateContactState(const ContactIndicator& contactMode)
 
 void DynWBC::getRobotStates(const Eigen::VectorVQd &q_,
                             const Eigen::VectorVQd &qdot_,
+                            const Eigen::VectorVQd &qdot_des_,
                             const Eigen::VectorVQd &qddot_cmd_,
                             const Eigen::MatrixVQVQd &Mass_,
                             const Eigen::VectorVQd &Grav_,
@@ -155,6 +156,7 @@ void DynWBC::getRobotStates(const Eigen::VectorVQd &q_,
     //--- Robot States
     q = q_;
     qdot = qdot_;
+    qdot_des = qdot_des_;
     qddot_cmd = qddot_cmd_;
     M = Mass_;
     G = Grav_;

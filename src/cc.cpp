@@ -106,6 +106,7 @@ void CustomController::computeSlow()
             dyn_wbc_.updateContactState(contact_mode_);
             dyn_wbc_.getRobotStates(q_,
                                     qdot_,
+                                    qdot_des,
                                     qddot_des,
                                     M_,
                                     G_,

@@ -34,6 +34,7 @@ public:
     void updateContactState(const ContactIndicator& contactMode);
     void getRobotStates(const Eigen::VectorVQd &q_,
                         const Eigen::VectorVQd &qdot_,
+                        const Eigen::VectorVQd &qdot_des_,
                         const Eigen::VectorVQd &qddot_cmd_,
                         const Eigen::MatrixVVd &Mass_,
                         const Eigen::VectorVQd &Grav_,
@@ -52,6 +53,7 @@ public:
     Eigen::VectorXd contact_wrench_cmd;
     Eigen::Vector6d qddot_b_cmd;
     Eigen::VectorQd qddot_a_cmd;
+    Eigen::VectorVQd qdot_des;
     Eigen::VectorVQd qddot_cmd;
     Eigen::VectorXd qddot_sol; 
     Eigen::VectorXd contact_wrench_sol; 

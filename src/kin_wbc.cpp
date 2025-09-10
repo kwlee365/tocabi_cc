@@ -200,14 +200,15 @@ void KinWBC::calcInequalityConstraint(const Eigen::VectorVQd& q_, const Eigen::V
     A_qpos.rightCols(MODEL_DOF).setIdentity();
 
     double alpha_qpos = 1.0;
+    double eps_qpos = 50.0;
     Eigen::VectorXd lbA_qpos; lbA_qpos.setZero(MODEL_DOF); 
     Eigen::VectorXd ubA_qpos; ubA_qpos.setZero(MODEL_DOF); 
     Eigen::VectorQd q_a; q_a.setZero(MODEL_DOF);
     q_a = q_.tail(MODEL_DOF);
     for(int i = 0; i < MODEL_DOF; i++)
     {
-        lbA_qpos(i) = min(max(alpha_qpos * (q_pos_l_lim_(i) - q_a(i)), q_vel_l_lim_(i)), q_vel_h_lim_(i));
-        ubA_qpos(i) = max(min(alpha_qpos * (q_pos_h_lim_(i) - q_a(i)), q_vel_h_lim_(i)), q_vel_l_lim_(i));
+        lbA_qpos(i) = min(max(alpha_qpos * (q_pos_l_lim_(i) - q_a(i)) + (1.0 / eps_qpos), q_vel_l_lim_(i)), q_vel_h_lim_(i));
+        ubA_qpos(i) = max(min(alpha_qpos * (q_pos_h_lim_(i) - q_a(i)) - (1.0 / eps_qpos), q_vel_h_lim_(i)), q_vel_l_lim_(i));
     }
     
     constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
@@ -215,12 +216,13 @@ void KinWBC::calcInequalityConstraint(const Eigen::VectorVQd& q_, const Eigen::V
     //--- (2) Reachability constraints
     const int m = static_cast<int>(grad_reachability_.size()); 
     double alpha_reachability = 1.0;
+    double eps_reachability = 50.0;
     Eigen::MatrixXd A_reachability; A_reachability.setZero(m, dof_);
     Eigen::VectorXd lbA_reachability; lbA_reachability.setZero(m);
 
     for (int i = 0; i < m; ++i) {
             A_reachability.block(i, 0, 1, dof_) = grad_reachability_[i];
-            lbA_reachability(i) = (-1.0) * alpha_reachability * cbf_reachability_[i];
+            lbA_reachability(i) = (-1.0) * alpha_reachability * cbf_reachability_[i] + (1.0 / eps_reachability) * grad_reachability_[i].squaredNorm();
     }
 
     constraints_.push_back({   
