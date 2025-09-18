@@ -4,6 +4,7 @@ KinWBC::KinWBC(int dof) : dof_(dof) {}
 
 void KinWBC::computeTaskSpaceKinematicWBC(
     const std::vector<std::vector<TaskInfo>>& task_hierarchy,
+    const ContactIndicator& contactMode,
     const std::map<std::string, Eigen::Vector3d>& x_desired, const std::map<std::string, Eigen::Vector3d>& dx_desired, const std::map<std::string, Eigen::Vector3d>& ddx_desired,
     const std::map<std::string, Eigen::Matrix3d>& R_desired, const std::map<std::string, Eigen::Vector3d>& w_desired, const std::map<std::string, Eigen::Vector3d>& dw_desired,
     const std::map<std::string, Eigen::Vector3d>& task_pos_Kp, const std::map<std::string, Eigen::Vector3d>& task_ori_Kp, 
@@ -14,15 +15,11 @@ void KinWBC::computeTaskSpaceKinematicWBC(
 {
     //--- Initialization
     qdot_des = Eigen::VectorVQd::Zero();
-    Eigen::MatrixXd Ni = Eigen::MatrixXd::Identity(dof_, dof_) - DyrosMath::pinv_SVD(base_contact_Jac) * base_contact_Jac;
-
-    int total_m = 0;
-    for (const auto& task_group : task_hierarchy)
-    {
-        total_m += 3 * task_group.size();
-    }
-
-    J_qp.setZero(total_m, dof_);
+    Eigen::MatrixXd Ni = Eigen::MatrixXd::Identity(dof_, dof_);
+    base_contact_Jac_.setZero(base_contact_Jac.rows(), base_contact_Jac.cols());
+    base_contact_Jac_ = base_contact_Jac;
+    contact_mode_prev_ = contact_mode_;
+    contact_mode_ = contactMode;
 
     //--- Nullspace-based Prioritized Task Execution
     int row_offset = 0;
@@ -44,8 +41,6 @@ void KinWBC::computeTaskSpaceKinematicWBC(
                 Eigen::Vector3d pos_err = x_desired.at(name)  - base_ee_pos.at(name);
                 Eigen::Vector3d vel_err = dx_desired.at(name) - base_ee_v.at(name); 
 
-                J_qp.block(row_offset + 3 * i, 0, 3, dof_) = base_Jac_v.at(name);
-
                 e.segment<3>(3 * i)  = pos_err;
                 de.segment<3>(3 * i) = dx_desired.at(name) + Kp_vec.asDiagonal() * pos_err;
                 dde.segment<3>(3 * i) = ddx_desired.at(name);
@@ -57,8 +52,6 @@ void KinWBC::computeTaskSpaceKinematicWBC(
                 J.block(3 * i, 0, 3, dof_) = base_Jac_w.at(name);
                 Eigen::Vector3d ori_err = -DyrosMath::getPhi(base_ee_rot.at(name), R_desired.at(name));
                 Eigen::Vector3d vel_err = (w_desired.at(name) - base_ee_w.at(name)); 
-
-                J_qp.block(row_offset + 3 * i, 0, 3, dof_) = base_Jac_w.at(name);
 
                 e.segment<3>(3 * i)   = ori_err;
                 de.segment<3>(3 * i)  = w_desired.at(name) + Kp_vec.asDiagonal() * ori_err;
@@ -79,9 +72,6 @@ void KinWBC::computeTaskSpaceKinematicWBC(
         qdot_des += J_pinv * (de  - J * qdot_des);
         Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - J_pinv * J_pre);
     }
-
-    N_qp.setZero(); 
-    N_qp = Eigen::MatrixXd::Identity(dof_, dof_) - DyrosMath::pinv_SVD(base_contact_Jac) * base_contact_Jac;
 }
 
 void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
@@ -93,6 +83,17 @@ void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
     calcCostGrad(qdot_des);
     calcEqualityConstraint();
     calcInequalityConstraint(q, q_pos_l_lim, q_pos_h_lim, q_vel_l_lim, q_vel_h_lim);
+    if (contact_mode_ != contact_mode_prev_)
+    {
+        if(contact_mode_prev_ == ContactIndicator::DoubleSupport)
+        {
+            is_filter_init_ = true;
+            is_gradhess_init_ = true;
+            std::cout << "!!!!!!!!!!CONTACT TRIGGER!!!!!!!!!!";
+            std::cout << "Transition from [" << contactIndicatorToString(contact_mode_)
+                      << "] to [" << contactIndicatorToString(contact_mode_) << "]" << std::endl;
+        }
+    }
 
     total_num_state = constraints_.empty() ? 0 : constraints_[0].A.cols();
 
@@ -177,9 +178,6 @@ void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
 void KinWBC::calcCostHess()
 {
     Hess.setIdentity(dof_, dof_);
-
-    // Hess.setZero(dof_, dof_);
-    // Hess = N_qp.transpose() * N_qp + J_qp.transpose() * J_qp;
 }
 
 void KinWBC::calcCostGrad(const Eigen::VectorVQd& qdot_des)
@@ -190,7 +188,6 @@ void KinWBC::calcCostGrad(const Eigen::VectorVQd& qdot_des)
 
 void KinWBC::calcEqualityConstraint()
 {
-
 }
 
 void KinWBC::calcInequalityConstraint(const Eigen::VectorVQd& q_, const Eigen::VectorQd& q_pos_l_lim_, const Eigen::VectorQd& q_pos_h_lim_, const Eigen::VectorQd& q_vel_l_lim_, const Eigen::VectorQd& q_vel_h_lim_)

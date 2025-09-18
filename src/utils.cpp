@@ -59,3 +59,88 @@ Eigen::Vector3d getOrientationError(const Eigen::Matrix3d& current_rotation,
 
     return phi;
 }
+
+Eigen::Matrix3d hat(const Eigen::Vector3d& v)
+{
+    Eigen::Matrix3d m;
+    m <<     0, -v(2),  v(1),
+          v(2),     0, -v(0),
+         -v(1),  v(0),     0;
+    return m;
+}
+
+Eigen::Vector3d vee(const Eigen::Matrix3d& M)
+{
+    Eigen::Vector3d v;
+    v << M(2,1), M(0,2), M(1,0);
+    return v;
+}
+
+double cubicBezierPolynomial(double current_time, double start_time, double end_time, double p_init, double p_mid, double p_end)
+{
+    double x_t;
+
+    double P0 = p_init;
+    double P1 = p_mid;
+    double P2 = p_mid;
+    double P3 = p_end;
+
+    if (current_time < start_time)
+    {
+        x_t = P0;
+    }
+    else if (current_time > end_time)
+    {
+        x_t = P3;
+    }
+    else
+    {
+        double elapsed_time = current_time - start_time;
+        double total_time   = end_time     - start_time - 1;
+
+        double t = elapsed_time / total_time;
+
+        double coeff0 = P0;
+        double coeff1 = (-3 * P0 + 3 * P1);
+        double coeff2 = (3 * P0 - 6 * P1 + 3 * P2);
+        double coeff3 = (-1 * P0 + 3 * P1 - 3 * P2 + P3);
+
+        x_t = coeff0 + coeff1 * t + coeff2 * t * t + coeff3 * t * t * t;
+    }
+
+    return x_t;
+}
+
+double cubicDotBezierPolynomial(double current_time, double start_time, double end_time, double p_init, double p_mid, double p_end)
+{
+    double x_t;
+
+    double P0 = p_init;
+    double P1 = p_mid;
+    double P2 = p_mid;
+    double P3 = p_end;
+
+    if (current_time < start_time)
+    {
+        x_t = 3*P1 - 3*P0;
+    }
+    else if (current_time > end_time)
+    {
+        x_t = 3*P3 - 3*P2;
+    }
+    else
+    {
+        double elapsed_time = current_time - start_time;
+        double total_time   = end_time     - start_time - 1;
+
+        double t = elapsed_time / total_time;
+
+        double coeff0 =(-3 * P0 + 3 * P1);
+        double coeff1 = (6 * P0 - 12 * P1 + 6 * P2);
+        double coeff2 = (9 * P1 - 3 * P0 - 9 * P2 + 3 * P3);
+
+        x_t = coeff0 + coeff1 * t + coeff2 * t * t;
+    }
+
+    return x_t;
+}

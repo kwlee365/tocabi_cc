@@ -11,12 +11,13 @@
 #include "wholebody_functions.h"
 #include "kin_wbc.h"
 #include "dyn_wbc.h"
+#include "footstep_planner.h"
+#include "com_planner.h"
 #include "utils.h"
 
 enum class TestMotionType {
     None,
     PelvHand,
-    PelvHandJoy,
     Taichi,
     Walking
 };
@@ -39,6 +40,9 @@ public:
     double target_vel_y_ = 0.0;
     double target_vel_yaw_ = 0.0;
 
+    Eigen::Vector3d v_cmd;
+    Eigen::Vector3d w_cmd;
+
     void loadParams();
 
     //--- Thread
@@ -53,6 +57,7 @@ public:
     bool is_mode_7_working = true;
     bool is_torque_desired_init = true;
     bool is_derivative_init = true;
+    bool is_walking_init = true;
     bool is_torque_transition = false;
     bool is_left_contact_transition = false;
     bool is_right_contact_transition = false;
@@ -60,10 +65,12 @@ public:
 
     //--- Robot Model
     RigidBodyDynamics::Model model_;  
-    LinkData link_cc_[LINK_NUMBER + 1];
     KinWBC kin_wbc_;  
     DynWBC dyn_wbc_;  
+    FootstepPlanner footstep_planner_;
+    ComPlanner com_planner_;
     std::vector<std::vector<TaskInfo>> task_hierarchy;
+    std::set<std::string> task_names;
     ContactIndicator contact_mode_;
     unsigned int contact_dim = 12;
 
@@ -72,10 +79,8 @@ public:
 
     Eigen::VectorXd Kp; Eigen::MatrixXd Kp_diag;
     Eigen::VectorXd Kd; Eigen::MatrixXd Kd_diag;
-    Eigen::VectorXd Ki; Eigen::MatrixXd Ki_diag;
     Eigen::VectorXd Kp_virtual; Eigen::MatrixVVd Kp_virtual_diag;
     Eigen::VectorXd Kd_virtual; Eigen::MatrixVVd Kd_virtual_diag;
-    Eigen::VectorXd Ki_virtual; Eigen::MatrixVVd Ki_virtual_diag;
     Eigen::VectorQd joint_pos_limit_l_;
     Eigen::VectorQd joint_pos_limit_h_;
     Eigen::VectorQd joint_vel_limit_l_;
@@ -91,6 +96,8 @@ public:
     std::string chest_link_name = "Upperbody_Link";
     std::string lfoot_link_name = "L_Foot_Link";
     std::string rfoot_link_name = "R_Foot_Link";
+    std::string lhip_link_name = "L_HipCenter_Link";
+    std::string rhip_link_name = "R_HipCenter_Link";
     std::string lhand_link_name = "L_Wrist2_Link";
     std::string rhand_link_name = "R_Wrist2_Link";
     std::string lshoulder_link_name = "L_Shoulder1_Link";
@@ -103,6 +110,8 @@ public:
         {chest_link_name, 3},
         {lfoot_link_name, 9},
         {rfoot_link_name, 15},
+        {lhip_link_name, 5},
+        {rhip_link_name, 11},
         {lhand_link_name, 23},
         {rhand_link_name, 31},
         {lshoulder_link_name, 16},
@@ -145,6 +154,7 @@ public:
     Eigen::MatrixXd base_contact_lambda;
     Eigen::MatrixXd base_contact_Jac_inv_T;
     Eigen::MatrixVVd base_contact_N;
+    Eigen::VectorXd base_contact_vw;
 
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_w;
@@ -171,7 +181,6 @@ public:
     std::map<std::string, Eigen::Matrix3d>  init_support_ee_rot;
     std::map<std::string, Eigen::Vector3d>  init_support_ee_v;
     std::map<std::string, Eigen::Vector3d>  init_support_ee_w;
-    Eigen::Vector3d support_dcm_mea;
 
     Eigen::MatrixXd M_temp_;
     Eigen::VectorXd G_temp_;
@@ -192,11 +201,6 @@ public:
     //--- Desired Variables
     std::map<std::string, Eigen::Matrix3d> R_desired;
     std::map<std::string, Eigen::Vector3d> x_desired, dx_desired, ddx_desired, w_desired, dw_desired;
-    std::map<std::string, Eigen::Matrix3d> support_R_desired;
-    std::map<std::string, Eigen::Vector3d> support_x_desired, support_dx_desired, support_ddx_desired, support_w_desired, support_dw_desired;
-    Eigen::Vector3d support_dcm_des;
-    Eigen::Vector3d support_zmp_ref;
-    Eigen::Vector3d support_zmp_des;
     std::map<std::string, Eigen::Vector3d> task_pos_Kp; 
     std::map<std::string, Eigen::Vector3d> task_ori_Kp; 
     Eigen::VectorVQd q_, qdot_, qdot_LPF;
@@ -208,10 +212,9 @@ public:
     void movePelvPose(double traj_time, double pelv_dist);
     void moveHandPose(double traj_time, double hand_dist);
     void movePelvHandPose(double traj_time, double pelv_dist, double hand_dist);
-    void movePelvPoseJoy(const double& vx, const double& vy, const double& wz);
-    void movePelvHandPoseJoy(const double& target_vel_x_, const double& target_vel_y_, const double& target_vel_yaw_, const double& traj_time, const double& hand_dist);
     void moveTaichiMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height);
-    void runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& swing_duration);
+    void bipedalWalkingController(const double& step_time, const double& foot_height, const double& vx, const double& vy, const double& wz);
+    void runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& step_time);
     TestMotionType motion_mode_ = TestMotionType::None;
 
 

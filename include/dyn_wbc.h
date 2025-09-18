@@ -38,7 +38,9 @@ public:
                         const Eigen::VectorVQd &qddot_cmd_,
                         const Eigen::MatrixVVd &Mass_,
                         const Eigen::VectorVQd &Grav_,
-                        const Eigen::MatrixXd &base_contact_Jac_);
+                        const Eigen::MatrixXd &base_contact_Jac_,
+                        const Eigen::MatrixXd &base_contact_Jac_dot_,
+                        const Eigen::VectorXd &base_contact_vw_);
 
     Eigen::MatrixXd Hess;  // HESSIAN
     Eigen::VectorXd grad;  // GRADIENT
@@ -73,7 +75,9 @@ private:
     Eigen::MatrixVVd M; 
     Eigen::VectorVQd G; 
     Eigen::MatrixXd base_contact_Jac;
+    Eigen::MatrixXd base_contact_Jac_dot;
     Eigen::MatrixXd base_contact_Jac_T;
+    Eigen::VectorXd base_contact_vw;
     Eigen::MatrixXd Sa_T;
     Eigen::MatrixXd Sa;  
     Eigen::MatrixXd Sf;  
@@ -85,7 +89,7 @@ private:
     Eigen::VectorXd lbA_fric;
     Eigen::VectorXd ubA_fric;
 
-    double W_cwr = 1e-3;
+    double W_cwr = 1e-5;
     double W_qddot_b = 1.0;
     double W_energy = 1.0;
 

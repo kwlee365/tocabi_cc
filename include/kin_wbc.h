@@ -6,6 +6,7 @@
 #include <string>
 #include "wholebody_functions.h"
 #include "task_definition.h"
+#include "utils.h"
 
 class KinWBC {
 public:
@@ -13,6 +14,7 @@ public:
 
     void computeTaskSpaceKinematicWBC(
         const std::vector<std::vector<TaskInfo>> &task_hierarchy,
+        const ContactIndicator& contactMode,
         const std::map<std::string, Eigen::Vector3d> &x_desired, const std::map<std::string, Eigen::Vector3d> &dx_desired, const std::map<std::string, Eigen::Vector3d> &ddx_desired,
         const std::map<std::string, Eigen::Matrix3d> &R_desired, const std::map<std::string, Eigen::Vector3d> &w_desired, const std::map<std::string, Eigen::Vector3d> &dw_desired,
         const std::map<std::string, Eigen::Vector3d> &task_pos_Kp, const std::map<std::string, Eigen::Vector3d> &task_ori_Kp,
@@ -49,11 +51,13 @@ public:
     int total_num_constraints = 0;
 
     Eigen::VectorVQd qdot_safety;
-    Eigen::MatrixVQVQd N_qp;
-    Eigen::MatrixXd J_qp;
 
 private:
     int dof_;
+    double dt_ = 5e-4; 
+    ContactIndicator contact_mode_;
+    ContactIndicator contact_mode_prev_;
+    Eigen::MatrixXd base_contact_Jac_;
 
     std::string base_link_name  = "Pelvis_Link";
     std::string chest_link_name = "Upperbody_Link";

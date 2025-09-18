@@ -24,11 +24,14 @@ bool DynWBC::computeDynamicWBC(Eigen::VectorVQd&qddot_qp, Eigen::VectorXd& conta
     calcInequalityConstraint();
     if (contact_mode != contact_mode_prev)
     {
-        is_wbc_init_ = true;
-        is_gradhess_init_ = true;
-        std::cout << "!!!!!!!!!!CONTACT TRIGGER!!!!!!!!!!";
-        std::cout << "Transition from [" << contactIndicatorToString(contact_mode_prev)
-                << "] to [" << contactIndicatorToString(contact_mode) << "]" << std::endl;
+        if(contact_mode_prev == ContactIndicator::DoubleSupport)
+        {
+            is_wbc_init_ = true;
+            is_gradhess_init_ = true;
+            std::cout << "!!!!!!!!!!CONTACT TRIGGER!!!!!!!!!!";
+            std::cout << "Transition from [" << contactIndicatorToString(contact_mode_prev)
+                    << "] to [" << contactIndicatorToString(contact_mode) << "]" << std::endl;
+        }
     }
 
     total_num_state = constraints_.empty() ? 0 : constraints_[0].A.cols();
@@ -151,7 +154,9 @@ void DynWBC::getRobotStates(const Eigen::VectorVQd &q_,
                             const Eigen::VectorVQd &qddot_cmd_,
                             const Eigen::MatrixVQVQd &Mass_,
                             const Eigen::VectorVQd &Grav_,
-                            const Eigen::MatrixXd &base_contact_Jac_) 
+                            const Eigen::MatrixXd &base_contact_Jac_,
+                            const Eigen::MatrixXd &base_contact_Jac_dot_,
+                            const Eigen::VectorXd &base_contact_vw_) 
 {
     //--- Robot States
     q = q_;
@@ -164,8 +169,14 @@ void DynWBC::getRobotStates(const Eigen::VectorVQd &q_,
     base_contact_Jac.setZero(base_contact_Jac_.rows(), base_contact_Jac_.cols());
     base_contact_Jac = base_contact_Jac_;
 
+    base_contact_Jac_dot.setZero(base_contact_Jac_dot_.rows(), base_contact_Jac_dot_.cols());
+    base_contact_Jac_dot = base_contact_Jac_dot_;
+
     base_contact_Jac_T.setZero(base_contact_Jac_.cols(), base_contact_Jac_.rows());
     base_contact_Jac_T = base_contact_Jac.transpose();
+
+    base_contact_vw.setZero(base_contact_vw_.size());
+    base_contact_vw = base_contact_vw_;
 
     Sa_T.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF); Sa_T.bottomRows(MODEL_DOF).setIdentity();
     Sa.setZero(MODEL_DOF, MODEL_DOF_VIRTUAL); Sa = Sa_T.transpose();
@@ -241,6 +252,18 @@ void DynWBC::calcEqualityConstraint()
     lbA_fl = Sf * G;
     ubA_fl = Sf * G;
     constraints_.push_back({A_fl, lbA_fl, ubA_fl});
+
+    //--- (1) contact constraints
+    Eigen::MatrixXd A_cc; A_cc.setZero(contact_dim, contact_dim + dof);
+    Eigen::VectorXd lbA_cc; lbA_cc.setZero(contact_dim);
+    Eigen::VectorXd ubA_cc; ubA_cc.setZero(contact_dim);
+
+    A_cc.rightCols(dof) = base_contact_Jac;
+    lbA_cc = (-1.0) * base_contact_Jac_dot * qdot;
+    ubA_cc = (-1.0) * base_contact_Jac_dot * qdot;
+    lbA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
+    ubA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
+    constraints_.push_back({A_cc, lbA_cc, ubA_cc});
 }
 
 void DynWBC::calcInequalityConstraint()
