@@ -84,7 +84,7 @@ void CustomController::computeSlow()
                                                   task_pos_Kp, task_ori_Kp, 
                                                   base_ee_pos, base_ee_rot,
                                                   base_ee_v, base_ee_w,
-                                                  base_Jac_v, base_Jac_w, base_contact_Jac, 
+                                                  base_Jac_v, base_Jac_w, base_CMM, 
                                                   qdot_, qdot_des);
             kin_wbc_.safetyFilter(qdot_des, q_, joint_pos_limit_l_, joint_pos_limit_h_, joint_vel_limit_l_, joint_vel_limit_h_);
 
@@ -256,8 +256,8 @@ void CustomController::loadParams()
     }
     for (int i = 0; i < MODEL_DOF_VIRTUAL; ++i)
     {
-        Kp_virtual(i) = kp_dyn_vec[i];
-        Kd_virtual(i) = kd_dyn_vec[i];
+        Kp_virtual(i) = kp_dyn_vec[i] * 2.0;
+        Kd_virtual(i) = kd_dyn_vec[i] * 2.0;
     }
 
     Kp_virtual_diag = Kp_virtual.asDiagonal();
@@ -293,7 +293,7 @@ void CustomController::loadParams()
     task_pos_Kp[rfoot_link_name](2) = 10.0;
     task_pos_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[com_name]        = 5.0 * Eigen::Vector3d::Ones();
+    task_pos_Kp[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 
     task_ori_Kp[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[chest_link_name] = 50.0 * Eigen::Vector3d::Ones();
@@ -426,6 +426,10 @@ void CustomController::stateManager()
         base_ee_v[name]   = base_rot.transpose() *  ee_v[name];                               
         base_ee_w[name]   = base_rot.transpose() *  ee_w[name];
     }
+
+    base_CMM.setZero();
+    base_CMM.topRows(3)    = base_rot.transpose() * rd_.CMM.topRows(3);
+    base_CMM.bottomRows(3) = base_rot.transpose() * rd_.CMM.bottomRows(3);
 
     for (const auto& [name, idx] : link_index_map)
     {
@@ -976,7 +980,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
 
     //--- Swing & Support Feet Test
-    double step_length_x   = 0.1;
+    double step_length_x   = 0.3;
     double step_length_y   = 0.0;
     double step_length_yaw = 0.0;
  

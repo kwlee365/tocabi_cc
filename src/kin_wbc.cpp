@@ -10,14 +10,12 @@ void KinWBC::computeTaskSpaceKinematicWBC(
     const std::map<std::string, Eigen::Vector3d>& task_pos_Kp, const std::map<std::string, Eigen::Vector3d>& task_ori_Kp, 
     const std::map<std::string, Eigen::Vector3d>& base_ee_pos, const std::map<std::string, Eigen::Matrix3d>& base_ee_rot,
     const std::map<std::string, Eigen::Vector3d>& base_ee_v, const std::map<std::string, Eigen::Vector3d>& base_ee_w, 
-    const std::map<std::string, Eigen::Matrix3Vd>& base_Jac_v, const std::map<std::string, Eigen::Matrix3Vd>& base_Jac_w, const Eigen::MatrixXd& base_contact_Jac, 
+    const std::map<std::string, Eigen::Matrix3Vd>& base_Jac_v, const std::map<std::string, Eigen::Matrix3Vd>& base_Jac_w, const Eigen::Matrix6Vd& base_CMM, 
     const Eigen::VectorVQd& qdot, Eigen::VectorVQd& qdot_des)
 {
     //--- Initialization
     qdot_des = Eigen::VectorVQd::Zero();
     Eigen::MatrixXd Ni = Eigen::MatrixXd::Identity(dof_, dof_);
-    base_contact_Jac_.setZero(base_contact_Jac.rows(), base_contact_Jac.cols());
-    base_contact_Jac_ = base_contact_Jac;
     contact_mode_prev_ = contact_mode_;
     contact_mode_ = contactMode;
 
@@ -72,6 +70,13 @@ void KinWBC::computeTaskSpaceKinematicWBC(
         qdot_des += J_pinv * (de  - J * qdot_des);
         Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - J_pinv * J_pre);
     }
+
+    Eigen::MatrixXd CMM_yaw = base_CMM.bottomRows(1);
+    Eigen::MatrixXd CMM_yaw_pre = CMM_yaw * Ni;
+    Eigen::MatrixXd CMM_yaw_pinv = DyrosMath::pinv_SVD(CMM_yaw_pre);
+
+    qdot_des += CMM_yaw_pinv * (- CMM_yaw * qdot_des);
+    Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - CMM_yaw_pinv * CMM_yaw_pre);
 }
 
 void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,

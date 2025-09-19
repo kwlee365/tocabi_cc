@@ -20,7 +20,7 @@ public:
         const std::map<std::string, Eigen::Vector3d> &task_pos_Kp, const std::map<std::string, Eigen::Vector3d> &task_ori_Kp,
         const std::map<std::string, Eigen::Vector3d> &base_ee_pos, const std::map<std::string, Eigen::Matrix3d> &base_ee_rot,
         const std::map<std::string, Eigen::Vector3d> &base_ee_v, const std::map<std::string, Eigen::Vector3d> &base_ee_w,
-        const std::map<std::string, Eigen::Matrix3Vd> &base_Jac_v, const std::map<std::string, Eigen::Matrix3Vd> &base_Jac_w, const Eigen::MatrixXd &base_contact_Jac, 
+        const std::map<std::string, Eigen::Matrix3Vd> &base_Jac_v, const std::map<std::string, Eigen::Matrix3Vd> &base_Jac_w, const Eigen::Matrix6Vd& base_CMM, 
         const Eigen::VectorVQd &qdot, Eigen::VectorVQd &qdot_des);
 
     bool is_gradhess_init_ = true;
@@ -57,7 +57,6 @@ private:
     double dt_ = 5e-4; 
     ContactIndicator contact_mode_;
     ContactIndicator contact_mode_prev_;
-    Eigen::MatrixXd base_contact_Jac_;
 
     std::string base_link_name  = "Pelvis_Link";
     std::string chest_link_name = "Upperbody_Link";

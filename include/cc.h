@@ -156,6 +156,8 @@ public:
     Eigen::MatrixVVd base_contact_N;
     Eigen::VectorXd base_contact_vw;
 
+    Eigen::Matrix6Vd base_CMM;
+
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_w;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v_prev;
