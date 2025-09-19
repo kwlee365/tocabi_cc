@@ -256,7 +256,7 @@ void CustomController::loadParams()
     }
     for (int i = 0; i < MODEL_DOF_VIRTUAL; ++i)
     {
-        Kp_virtual(i) = kp_dyn_vec[i] * 2.0;
+        Kp_virtual(i) = kp_dyn_vec[i] * 0.0;
         Kd_virtual(i) = kd_dyn_vec[i] * 2.0;
     }
 
@@ -980,7 +980,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
 
     //--- Swing & Support Feet Test
-    double step_length_x   = 0.3;
+    double step_length_x   = 0.4;
     double step_length_y   = 0.0;
     double step_length_yaw = 0.0;
  
