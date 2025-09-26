@@ -40,7 +40,8 @@ public:
                         const Eigen::VectorVQd &Grav_,
                         const Eigen::MatrixXd &base_contact_Jac_,
                         const Eigen::MatrixXd &base_contact_Jac_dot_,
-                        const Eigen::VectorXd &base_contact_vw_);
+                        const Eigen::VectorXd &base_contact_vw_,
+                        const Eigen::VectorXd &base_contact_pose_);
 
     Eigen::MatrixXd Hess;  // HESSIAN
     Eigen::VectorXd grad;  // GRADIENT
@@ -78,6 +79,7 @@ private:
     Eigen::MatrixXd base_contact_Jac_dot;
     Eigen::MatrixXd base_contact_Jac_T;
     Eigen::VectorXd base_contact_vw;
+    Eigen::VectorXd base_contact_pose;
     Eigen::MatrixXd Sa_T;
     Eigen::MatrixXd Sa;  
     Eigen::MatrixXd Sf;  

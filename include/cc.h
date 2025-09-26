@@ -156,6 +156,7 @@ public:
     Eigen::MatrixXd base_contact_Jac_inv_T;
     Eigen::MatrixVVd base_contact_N;
     Eigen::VectorXd base_contact_vw;
+    Eigen::VectorXd base_contact_pose;
 
     Eigen::Matrix6Vd base_CMM;
 

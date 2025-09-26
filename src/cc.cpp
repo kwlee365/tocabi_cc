@@ -75,7 +75,7 @@ void CustomController::computeSlow()
             }
 
             contactStateManager();
-            runTestMotion(3.0, 0.05, 0.2, 0.06, 0.6); 
+            runTestMotion(1.5, 0.05, 0.2, 0.06, 0.6); 
 
             //--- Whole-body Inverse Kinematics
             kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
@@ -106,7 +106,8 @@ void CustomController::computeSlow()
                                     G_,
                                     base_contact_Jac,
                                     base_contact_Jac_dot,
-                                    base_contact_vw);
+                                    base_contact_vw,
+                                    base_contact_pose);
 
             bool qp_status = true;
             qddot_qp.setZero(); contact_wrench_qp.setZero(contact_dim);
@@ -116,9 +117,6 @@ void CustomController::computeSlow()
             torque_inv_dyn = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF);
 
             Eigen::VectorQd torque_pd; torque_pd.setZero();
-            // torque_pd = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
-            torque_pd = Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
-            // torque_pd = Kd_diag * (- rd_.q_dot_);
 
             Eigen::VectorQd torque_unbound; torque_unbound.setZero();
             torque_unbound = torque_inv_dyn + torque_pd;
@@ -598,6 +596,7 @@ void CustomController::contactStateManager()
     base_contact_Jac.setZero(contact_dim, MODEL_DOF_VIRTUAL);
     base_contact_Jac_dot.setZero(contact_dim, MODEL_DOF_VIRTUAL);
     base_contact_vw.setZero(contact_dim);
+    base_contact_pose.setZero(contact_dim);
 
     if(contact_mode_ == ContactIndicator::DoubleSupport)
     {
@@ -611,6 +610,9 @@ void CustomController::contactStateManager()
         base_contact_vw.segment(3, 2) = base_ee_w[lfoot_link_name].head(2);
         base_contact_vw.segment(6, 3) = base_ee_v[rfoot_link_name];
         base_contact_vw.segment(9, 2) = base_ee_w[rfoot_link_name].head(2);
+
+        base_contact_pose.segment(3, 3) = -DyrosMath::getPhi(base_ee_rot[lfoot_link_name], Eigen::Matrix3d::Identity());
+        base_contact_pose.segment(9, 3) = -DyrosMath::getPhi(base_ee_rot[rfoot_link_name], Eigen::Matrix3d::Identity());
     }
     else if(contact_mode_ == ContactIndicator::LeftSingleSupport)
     {
@@ -620,6 +622,8 @@ void CustomController::contactStateManager()
 
         base_contact_vw.segment(0, 3) = base_ee_v[lfoot_link_name];
         base_contact_vw.segment(3, 2) = base_ee_w[lfoot_link_name].head(2);
+        base_contact_pose.segment(3, 3) = -DyrosMath::getPhi(base_ee_rot[lfoot_link_name], Eigen::Matrix3d::Identity());
+
     }
     else if(contact_mode_ == ContactIndicator::RightSingleSupport)
     {
@@ -629,6 +633,7 @@ void CustomController::contactStateManager()
 
         base_contact_vw.segment(0, 3) = base_ee_v[rfoot_link_name];
         base_contact_vw.segment(3, 2) = base_ee_w[rfoot_link_name].head(2);
+        base_contact_pose.segment(3, 3) = -DyrosMath::getPhi(base_ee_rot[rfoot_link_name], Eigen::Matrix3d::Identity());
     }
     else
     {

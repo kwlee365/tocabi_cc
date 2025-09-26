@@ -156,7 +156,8 @@ void DynWBC::getRobotStates(const Eigen::VectorVQd &q_,
                             const Eigen::VectorVQd &Grav_,
                             const Eigen::MatrixXd &base_contact_Jac_,
                             const Eigen::MatrixXd &base_contact_Jac_dot_,
-                            const Eigen::VectorXd &base_contact_vw_) 
+                            const Eigen::VectorXd &base_contact_vw_, 
+                            const Eigen::VectorXd &base_contact_pose_) 
 {
     //--- Robot States
     q = q_;
@@ -177,6 +178,9 @@ void DynWBC::getRobotStates(const Eigen::VectorVQd &q_,
 
     base_contact_vw.setZero(base_contact_vw_.size());
     base_contact_vw = base_contact_vw_;
+
+    base_contact_pose.setZero(base_contact_pose_.size());
+    base_contact_pose = base_contact_pose_;
 
     Sa_T.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF); Sa_T.bottomRows(MODEL_DOF).setIdentity();
     Sa.setZero(MODEL_DOF, MODEL_DOF_VIRTUAL); Sa = Sa_T.transpose();
@@ -254,16 +258,16 @@ void DynWBC::calcEqualityConstraint()
     constraints_.push_back({A_fl, lbA_fl, ubA_fl});
 
     //--- (1) contact constraints
-    // Eigen::MatrixXd A_cc; A_cc.setZero(contact_dim, contact_dim + dof);
-    // Eigen::VectorXd lbA_cc; lbA_cc.setZero(contact_dim);
-    // Eigen::VectorXd ubA_cc; ubA_cc.setZero(contact_dim);
+    Eigen::MatrixXd A_cc; A_cc.setZero(contact_dim, contact_dim + dof);
+    Eigen::VectorXd lbA_cc; lbA_cc.setZero(contact_dim);
+    Eigen::VectorXd ubA_cc; ubA_cc.setZero(contact_dim);
 
-    // A_cc.rightCols(dof) = base_contact_Jac;
-    // lbA_cc = (-1.0) * base_contact_Jac_dot * qdot;
-    // ubA_cc = (-1.0) * base_contact_Jac_dot * qdot;
-    // lbA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
-    // ubA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
-    // constraints_.push_back({A_cc, lbA_cc, ubA_cc});
+    A_cc.rightCols(dof) = base_contact_Jac;
+    lbA_cc = (-1.0) * base_contact_Jac_dot * qdot;
+    ubA_cc = (-1.0) * base_contact_Jac_dot * qdot;
+    lbA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-20.0) * base_contact_vw + (100.0) * base_contact_pose;
+    ubA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-20.0) * base_contact_vw + (100.0) * base_contact_pose;
+    constraints_.push_back({A_cc, lbA_cc, ubA_cc});
 }
 
 void DynWBC::calcInequalityConstraint()
