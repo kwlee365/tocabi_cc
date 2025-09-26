@@ -65,6 +65,7 @@ public:
 
     //--- Robot Model
     RigidBodyDynamics::Model model_;  
+    RigidBodyDynamics::Model model_clik;  
     KinWBC kin_wbc_;  
     DynWBC dyn_wbc_;  
     FootstepPlanner footstep_planner_;
@@ -160,6 +161,8 @@ public:
 
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_w;
+    std::map<std::string, Eigen::Matrix3Vd> base_Jac_v_clik;
+    std::map<std::string, Eigen::Matrix3Vd> base_Jac_w_clik;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v_prev;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_w_prev;
     std::map<std::string, Eigen::Matrix3Vd> base_Jac_v_dot;

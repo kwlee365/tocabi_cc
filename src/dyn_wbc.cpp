@@ -254,16 +254,16 @@ void DynWBC::calcEqualityConstraint()
     constraints_.push_back({A_fl, lbA_fl, ubA_fl});
 
     //--- (1) contact constraints
-    Eigen::MatrixXd A_cc; A_cc.setZero(contact_dim, contact_dim + dof);
-    Eigen::VectorXd lbA_cc; lbA_cc.setZero(contact_dim);
-    Eigen::VectorXd ubA_cc; ubA_cc.setZero(contact_dim);
+    // Eigen::MatrixXd A_cc; A_cc.setZero(contact_dim, contact_dim + dof);
+    // Eigen::VectorXd lbA_cc; lbA_cc.setZero(contact_dim);
+    // Eigen::VectorXd ubA_cc; ubA_cc.setZero(contact_dim);
 
-    A_cc.rightCols(dof) = base_contact_Jac;
-    lbA_cc = (-1.0) * base_contact_Jac_dot * qdot;
-    ubA_cc = (-1.0) * base_contact_Jac_dot * qdot;
-    lbA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
-    ubA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
-    constraints_.push_back({A_cc, lbA_cc, ubA_cc});
+    // A_cc.rightCols(dof) = base_contact_Jac;
+    // lbA_cc = (-1.0) * base_contact_Jac_dot * qdot;
+    // ubA_cc = (-1.0) * base_contact_Jac_dot * qdot;
+    // lbA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
+    // ubA_cc = (-1.0) * base_contact_Jac_dot * qdot + (-10.0) * base_contact_vw;
+    // constraints_.push_back({A_cc, lbA_cc, ubA_cc});
 }
 
 void DynWBC::calcInequalityConstraint()

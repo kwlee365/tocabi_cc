@@ -227,11 +227,11 @@ void KinWBC::calcInequalityConstraint(const Eigen::VectorVQd& q_, const Eigen::V
             lbA_reachability(i) = (-1.0) * alpha_reachability * cbf_reachability_[i] + (1.0 / eps_reachability) * grad_reachability_[i].squaredNorm();
     }
 
-    constraints_.push_back({   
-        A_reachability,
-        lbA_reachability,
-        Eigen::VectorXd::Constant(A_reachability.rows(), std::numeric_limits<double>::infinity())
-    });
+    // constraints_.push_back({   
+    //     A_reachability,
+    //     lbA_reachability,
+    //     Eigen::VectorXd::Constant(A_reachability.rows(), std::numeric_limits<double>::infinity())
+    // });
 }
 
 void KinWBC::getReachabilityConstraints(const std::vector<Eigen::MatrixXd> &J_reachability_, const std::vector<double> &h_reachability_)

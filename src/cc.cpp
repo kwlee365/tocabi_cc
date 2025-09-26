@@ -19,6 +19,7 @@ CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_
     std::string urdf_path, desc_package_path;
     ros::param::get("/tocabi_controller/urdf_path", desc_package_path);
     RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_, true, false);
+    RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_clik, true, false);
 
     //--- Joy Callback
     xbox_joy_sub_ = nh_cc_.subscribe<sensor_msgs::Joy>("/joy", 10, &CustomController::xBoxJoyCallback, this);
@@ -39,7 +40,7 @@ void CustomController::computeSlow()
         {
             loadParams();
 
-            motion_mode_ = TestMotionType::Walking;
+            motion_mode_ = TestMotionType::PelvHand;
 
             q_init_ = rd_.q_;
             WBC::SetContact(rd_, true, true);
@@ -74,7 +75,7 @@ void CustomController::computeSlow()
             }
 
             contactStateManager();
-            runTestMotion(5.0, 0.00, 0.5, 0.06, 0.6); 
+            runTestMotion(3.0, 0.05, 0.2, 0.06, 0.6); 
 
             //--- Whole-body Inverse Kinematics
             kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
@@ -88,6 +89,7 @@ void CustomController::computeSlow()
                                                   qdot_, qdot_des);
             kin_wbc_.safetyFilter(qdot_des, q_, joint_pos_limit_l_, joint_pos_limit_h_, joint_vel_limit_l_, joint_vel_limit_h_);
 
+            rd_.q_dot_desired = qdot_des.tail(MODEL_DOF);
             q_des += qdot_des / hz_;
             rd_.q_desired = q_des.tail(MODEL_DOF);
 
@@ -106,11 +108,20 @@ void CustomController::computeSlow()
                                     base_contact_Jac_dot,
                                     base_contact_vw);
 
-            Eigen::VectorQd torque_unbound; torque_unbound.setZero();
             bool qp_status = true;
             qddot_qp.setZero(); contact_wrench_qp.setZero(contact_dim);
             qp_status = dyn_wbc_.computeDynamicWBC(qddot_qp, contact_wrench_qp);
-            torque_unbound = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF);
+
+            Eigen::VectorQd torque_inv_dyn; torque_inv_dyn.setZero();
+            torque_inv_dyn = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF);
+
+            Eigen::VectorQd torque_pd; torque_pd.setZero();
+            // torque_pd = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
+            torque_pd = Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
+            // torque_pd = Kd_diag * (- rd_.q_dot_);
+
+            Eigen::VectorQd torque_unbound; torque_unbound.setZero();
+            torque_unbound = torque_inv_dyn + torque_pd;
 
             // --- Torque initialization
             static int tick_torque_desired_init = 0;
@@ -278,9 +289,9 @@ void CustomController::loadParams()
     }
 
     //--- Task Gain
-    task_pos_Kp[base_link_name](0)  = 1.0;
-    task_pos_Kp[base_link_name](1)  = 1.0;
-    task_pos_Kp[base_link_name](2)  = 1.0;
+    task_pos_Kp[base_link_name](0)  = 10.0;
+    task_pos_Kp[base_link_name](1)  = 10.0;
+    task_pos_Kp[base_link_name](2)  = 10.0;
     task_pos_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[lfoot_link_name](0) = 10.0;
@@ -293,14 +304,32 @@ void CustomController::loadParams()
     task_pos_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 
-    task_ori_Kp[base_link_name]  = 30.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[chest_link_name] = 50.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[lfoot_link_name] = 50.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[rfoot_link_name] = 50.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
+
+    // task_pos_Kp[base_link_name]  = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[lfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[rfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[lhand_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[rhand_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_pos_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
+
+    // task_ori_Kp[base_link_name]  = 1.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[lfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[rfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[lhand_link_name] = 5.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[rhand_link_name] = 5.0 * Eigen::Vector3d::Ones();
+    // task_ori_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
 }
 
 void CustomController::moveInitialPose()
@@ -404,6 +433,11 @@ void CustomController::stateManager()
         base_Jac_w[name]  = base_rot.transpose() * Jac_w[name];
         base_Jac[name].topRows(3)    = base_Jac_v[name];
         base_Jac[name].bottomRows(3) = base_Jac_w[name];
+
+        Eigen::MatrixXd J_temp; J_temp.setZero(6, MODEL_DOF_VIRTUAL);
+        RigidBodyDynamics::CalcPointJacobian6D(model_clik, q_des, link_index_map[name], Eigen::Vector3d::Zero(), J_temp, true);
+        base_Jac_v_clik[name] = J_temp.bottomRows(3);
+        base_Jac_w_clik[name] = J_temp.topRows(3);
 
         static bool is_jaco_dot_init = true;
         if (is_jaco_dot_init == true)
@@ -631,6 +665,11 @@ void CustomController::saveInitialState()
 
     rd_.q_desired = q_init_des;
 
+    q_des.segment(6, MODEL_DOF)= q_init_des;
+    dq_des.setZero(); 
+    qdot_des.setZero();
+    qddot_des.setZero(); 
+
     for (const auto& [name, idx] : link_index_map)
     {
         x_desired[name]   = init_support_ee_pos[name];
@@ -640,12 +679,20 @@ void CustomController::saveInitialState()
         R_desired[name]   = init_support_ee_rot[name];
         w_desired[name]   = Eigen::Vector3d::Zero();
         dw_desired[name]  = Eigen::Vector3d::Zero();
+
+        Eigen::MatrixXd J_temp; J_temp.setZero(6, MODEL_DOF_VIRTUAL);
+        RigidBodyDynamics::CalcPointJacobian6D(model_clik, q_des, link_urdf_id_map[name], Eigen::Vector3d::Zero(), J_temp, true);
+        base_Jac_v_clik[name] = J_temp.bottomRows(3);
+        base_Jac_w_clik[name] = J_temp.topRows(3);
+
+        std::cout << "name: " << name << std::endl;
+        std::cout << "base_Jac_v_clik[name]: " << std::endl;
+        std::cout << base_Jac_v_clik[name] << std::endl;
+        std::cout << "base_Jac_w_clik[name]: " << std::endl;
+        std::cout << base_Jac_w_clik[name] << std::endl;
     }
 
-    q_des.segment(6, MODEL_DOF)= q_init_des;
-    dq_des.setZero(); 
-    qdot_des.setZero();
-    qddot_des.setZero(); 
+
     
     torque_init = (Kp_diag * (q_init_des - rd_.q_)) - (Kd_diag * rd_.q_dot_);
 }
@@ -673,7 +720,7 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
 {
     // --- Set Task Hierarchy
     task_hierarchy= {
-            { {com_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
+            { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
             { {lfoot_link_name,  TaskType::Position}, {lfoot_link_name, TaskType::Orientation}, {rfoot_link_name,  TaskType::Position}, {rfoot_link_name, TaskType::Orientation}  },
             { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
@@ -708,9 +755,9 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
     static int tick_pelv = 0;
     double T = traj_time; // period
     double wn = (2.0 * M_PI) / T;
-    x_desired[com_name](1) = init_support_ee_pos[com_name](1) + pelv_dist * sin(wn * tick_pelv / hz_);
-    dx_desired[com_name](1) = wn * pelv_dist * cos(wn * tick_pelv / hz_);
-    ddx_desired[com_name](1) = (-1.0) * wn * wn * pelv_dist * sin(wn * tick_pelv / hz_);
+    x_desired[base_link_name](1) = init_support_ee_pos[base_link_name](1) + pelv_dist * sin(wn * tick_pelv / hz_);
+    dx_desired[base_link_name](1) = wn * pelv_dist * cos(wn * tick_pelv / hz_);
+    ddx_desired[base_link_name](1) = (-1.0) * wn * wn * pelv_dist * sin(wn * tick_pelv / hz_);
     tick_pelv++;
 
     //--- Hand Test
@@ -748,8 +795,9 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
     }
 
     //--- Data Logging
-    dataCC1 << x_desired[com_name].transpose()  << " " << support_ee_pos[com_name].transpose() << std::endl;
-    dataCC4 << init_support_ee_pos[lfoot_link_name].transpose() << " " << init_support_ee_pos[rfoot_link_name].transpose() << std::endl;
+    dataCC1 << x_desired[base_link_name].transpose()  << " " << support_ee_pos[base_link_name].transpose() << std::endl;
+    dataCC2 << x_desired[rhand_link_name].transpose() << " " << support_ee_pos[rhand_link_name].transpose() << std::endl;
+    dataCC3 << x_desired[lhand_link_name].transpose() << " " << support_ee_pos[lhand_link_name].transpose() << std::endl;
     
     //--- Map Desired to base frame
     for (const auto& name : task_names)
@@ -864,7 +912,9 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
                                                             init_support_ee_pos[rfoot_link_name](2) + foot_height, 
                                                             0.0, 0.0);
                                                             
-    dataCC1 << x_desired[rfoot_link_name].transpose()  << " " << support_ee_pos[rfoot_link_name].transpose() << std::endl;
+    dataCC1 << x_desired[base_link_name].transpose()  << " " << support_ee_pos[base_link_name].transpose() << std::endl;
+    dataCC2 << x_desired[rfoot_link_name].transpose()  << " " << support_ee_pos[rfoot_link_name].transpose() << std::endl;
+    dataCC3 << x_desired[lfoot_link_name].transpose()  << " " << support_ee_pos[lfoot_link_name].transpose() << std::endl;
 
     //--- Map Desired to base frame
     for (const auto& name : task_names)
@@ -886,14 +936,6 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
         {
             is_left_contact_transition = true;  // Update state transition next tick
         }
-        else if(contact_mode_ == ContactIndicator::RightSingleSupport)
-        {
-            is_left_contact_transition = true;  // Update state transition next tick
-        }
-        else if(contact_mode_ == ContactIndicator::LeftSingleSupport)
-        {
-            is_right_contact_transition = true;  // Update state transition next tick
-        }
         else
         {
             ROS_ERROR("Contact Indicator are assigned with something wrong value.");
@@ -906,12 +948,13 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
 {
     static int tick = 0;
     static int step_tick = 0;
+    static int step_cnt = 0;
 
     if (is_walking_init == true)
     {
         //--- Define Task Hierarchy
         task_hierarchy = {
-            {{com_name, TaskType::Position}, {base_link_name, TaskType::Orientation}},
+            {{base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation}},
             {{rfoot_link_name, TaskType::Position}, {rfoot_link_name, TaskType::Orientation}, {lfoot_link_name, TaskType::Position}, {lfoot_link_name, TaskType::Orientation}},
             {{chest_link_name, TaskType::Orientation}},
             {{head_link_name, TaskType::Orientation}},
@@ -947,7 +990,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     if(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport)
     {
         support_foot_link_name = lfoot_link_name;
-        support_hip_link_name = lhip_link_name;
+        support_hip_link_name  = lhip_link_name;
         swing_foot_link_name   = rfoot_link_name;
         swing_hip_link_name    = rhip_link_name;
     }
@@ -965,7 +1008,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
 
     //--- Swing & Support Feet Test
-    double step_length_x   = 0.0;
+    double step_length_x   = 0.2; if(step_cnt == 1) {step_length_x = step_length_x / 2.0;}
     double step_length_y   = 0.0;
     double step_length_yaw = 0.0;
  
@@ -974,14 +1017,14 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     if(contact_mode_ == ContactIndicator::LeftSingleSupport)
     {
         swing_hip_pos_des = support_ee_pos[swing_hip_link_name];
-        swing_hip_pos_des(0) -= 0.01;
+        swing_hip_pos_des(0) -= 0.06;
         swing_hip_pos_des(1) -= 0.03; 
         // step_length_x = vx;
     }
     else if(contact_mode_ == ContactIndicator::RightSingleSupport)
     {
         swing_hip_pos_des = support_ee_pos[swing_hip_link_name];
-        swing_hip_pos_des(0) -= 0.01;
+        swing_hip_pos_des(0) -= 0.06;
         swing_hip_pos_des(1) += 0.03; 
 
         // step_length_x = vx;
@@ -990,7 +1033,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     // footstep_des = footstep_planner_.planFootstep(swing_hip_pos_des, base_ee_v[base_link_name], step_time, vx, vy, wz);
     if(contact_mode_ == ContactIndicator::DoubleSupport)
     {
-        footstep_des = (init_support_ee_pos[swing_hip_link_name] + init_support_ee_pos[support_hip_link_name]).head(2) / 2.0;
+        footstep_des = (init_support_ee_pos[base_link_name] + init_support_ee_pos[base_link_name]).head(2) / 2.0;
         footstep_des(1) += 0.05;
         
         x_desired[lfoot_link_name] = init_support_ee_pos[lfoot_link_name];
@@ -1001,8 +1044,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
     else
     {
-        // footstep_des << swing_hip_pos_des(0) + step_length_x, swing_hip_pos_des(1) + step_length_y;
-        footstep_des << init_support_ee_pos[swing_hip_link_name](0) + step_length_x, init_support_ee_pos[swing_hip_link_name](1) + step_length_y;
+        footstep_des << init_support_ee_pos[swing_foot_link_name](0) + step_length_x, init_support_ee_pos[swing_foot_link_name](1) + step_length_y;
 
         x_desired[support_foot_link_name] = init_support_ee_pos[support_foot_link_name];
 
@@ -1021,13 +1063,13 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
 
     Eigen::Vector2d target_com_pos; target_com_pos.setZero();
     target_com_pos = footstep_des / 2.0;
-    com_planner_.planCenterOfMass(contact_mode_, init_support_ee_pos[com_name], init_support_ee_pos[support_foot_link_name].head(2), target_com_pos, step_tick / hz_, step_time,
+    com_planner_.planCenterOfMass(contact_mode_, init_support_ee_pos[base_link_name], init_support_ee_pos[support_foot_link_name].head(2), target_com_pos, step_tick / hz_, step_time,
                                   com_pos_desired, com_vel_desired, com_acc_desired);  
 
-    x_desired[com_name].head(2) = com_pos_desired;
-    dx_desired[com_name].head(2) = com_vel_desired;
-    ddx_desired[com_name].head(2) = com_acc_desired;
-    x_desired[com_name](2) = 0.73;
+    x_desired[base_link_name].head(2) = com_pos_desired;
+    dx_desired[base_link_name].head(2) = com_vel_desired;
+    ddx_desired[base_link_name].head(2) = com_acc_desired;
+    x_desired[base_link_name](2) = 0.765;
 
     // x_desired[base_link_name].head(2) = com_pos_temp;
 
@@ -1038,10 +1080,9 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     R_desired[base_link_name].setIdentity();
     w_desired[base_link_name](2) = wz;
 
-    dataCC1 << x_desired[com_name].transpose()  << " " << support_ee_pos[com_name].transpose() << std::endl;
+    dataCC1 << x_desired[base_link_name].transpose()  << " " << support_ee_pos[base_link_name].transpose() << std::endl;
     dataCC2 << x_desired[support_foot_link_name].transpose() << " " << support_ee_pos[support_foot_link_name].transpose() << std::endl;
     dataCC3 << x_desired[swing_foot_link_name].transpose() << " " << support_ee_pos[swing_foot_link_name].transpose() << std::endl;
-    dataCC4 << dx_desired[com_name].transpose() << " " << ddx_desired[com_name].transpose() << std::endl;
 
     //--- Map Desired to base frame
     for (const auto& name : task_names)
@@ -1082,6 +1123,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
             }
 
             step_tick = 0;
+            step_cnt++;
 
             is_transfer_phase = false;
         }
@@ -1105,6 +1147,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
             }
 
             step_tick = 0;
+            step_cnt++;
         }
     }
 
