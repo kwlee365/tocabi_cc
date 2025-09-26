@@ -23,13 +23,13 @@ close all
 
 dataCC = readmatrix('dataCC1.txt');
 com_pos = dataCC(:, 1:6);
-dataCC = readmatrix('dataCC2.txt');
-support_foot_pos = dataCC(:, 1:6);
-dataCC = readmatrix('dataCC3.txt');
-swing_foot_pos= dataCC(:, 1:6);
-dataCC = readmatrix('dataCC4.txt');
-com_vel_des= dataCC(:, 1:3);
-com_acc_des= dataCC(:, 4:6);
+% dataCC = readmatrix('dataCC2.txt');
+% support_foot_pos = dataCC(:, 1:6);
+% dataCC = readmatrix('dataCC3.txt');
+% swing_foot_pos= dataCC(:, 1:6);
+% dataCC = readmatrix('dataCC4.txt');
+% com_vel_des= dataCC(:, 1:3);
+% com_acc_des= dataCC(:, 4:6);
 figure()
 
 w = sqrt(9.81 / 0.73)
@@ -43,8 +43,8 @@ for cnt = 1:1:3
     
     % plot(support_foot_pos(:,start_cnt + cnt));
     % plot(support_foot_pos(:,start_cnt + cnt + 3));
-    plot(swing_foot_pos(:, start_cnt + cnt))
-    plot(swing_foot_pos(:, start_cnt + cnt + 3))
+    % plot(swing_foot_pos(:, start_cnt + cnt))
+    % plot(swing_foot_pos(:, start_cnt + cnt + 3))
     legend()
     % legend('com', 'support foot', 'swing foot');
 end

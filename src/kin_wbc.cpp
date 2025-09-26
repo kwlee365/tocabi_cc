@@ -71,12 +71,12 @@ void KinWBC::computeTaskSpaceKinematicWBC(
         Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - J_pinv * J_pre);
     }
 
-    Eigen::MatrixXd CMM_yaw = base_CMM.bottomRows(1);
-    Eigen::MatrixXd CMM_yaw_pre = CMM_yaw * Ni;
-    Eigen::MatrixXd CMM_yaw_pinv = DyrosMath::pinv_SVD(CMM_yaw_pre);
+    // Eigen::MatrixXd CMM_yaw = base_CMM.bottomRows(1);
+    // Eigen::MatrixXd CMM_yaw_pre = CMM_yaw * Ni;
+    // Eigen::MatrixXd CMM_yaw_pinv = DyrosMath::pinv_SVD(CMM_yaw_pre);
 
-    qdot_des += CMM_yaw_pinv * (- CMM_yaw * qdot_des);
-    Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - CMM_yaw_pinv * CMM_yaw_pre);
+    // qdot_des += CMM_yaw_pinv * (- CMM_yaw * qdot_des);
+    // Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - CMM_yaw_pinv * CMM_yaw_pre);
 }
 
 void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,

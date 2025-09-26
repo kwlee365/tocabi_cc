@@ -74,7 +74,7 @@ void CustomController::computeSlow()
             }
 
             contactStateManager();
-            runTestMotion(5.0, 0.10, 0.5, 0.06, 0.6); 
+            runTestMotion(5.0, 0.00, 0.5, 0.06, 0.6); 
 
             //--- Whole-body Inverse Kinematics
             kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
@@ -92,9 +92,7 @@ void CustomController::computeSlow()
             rd_.q_desired = q_des.tail(MODEL_DOF);
 
             qddot_des.setZero();
-            qddot_des = Kd_virtual_diag * (qdot_des - qdot_) + Kp_virtual_diag * (q_des - q_);
-            qddot_des.segment(3,3) =  Kd_virtual_diag.block(3,3,3,3) * (qdot_des.segment(3,3) - qdot_.segment(3,3)) 
-                                    - Kp_virtual_diag.block(3,3,3,3) * DyrosMath::getPhi(DyrosMath::Euler2rot(q_(3), q_(4), q_(5)), DyrosMath::Euler2rot(q_des(3), q_des(4), q_des(5)));
+            qddot_des = Kd_virtual_diag * (qdot_des - qdot_);
 
             //--- Contact Constrained Whole-body Control
             dyn_wbc_.updateContactState(contact_mode_);
@@ -291,8 +289,8 @@ void CustomController::loadParams()
     task_pos_Kp[rfoot_link_name](0) = 10.0;
     task_pos_Kp[rfoot_link_name](1) = 10.0;
     task_pos_Kp[rfoot_link_name](2) = 10.0;
-    task_pos_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_pos_Kp[lhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
+    task_pos_Kp[rhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 
     task_ori_Kp[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
@@ -300,8 +298,8 @@ void CustomController::loadParams()
     task_ori_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[lfoot_link_name] = 50.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[rfoot_link_name] = 50.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[lhand_link_name] = 5.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[rhand_link_name] = 5.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[lhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[rhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
 }
 
@@ -679,8 +677,7 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
             { {lfoot_link_name,  TaskType::Position}, {lfoot_link_name, TaskType::Orientation}, {rfoot_link_name,  TaskType::Position}, {rfoot_link_name, TaskType::Orientation}  },
             { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
-            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation} },
-            { {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
     };
 
     std::set<std::string> task_names;
@@ -711,15 +708,10 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
     static int tick_pelv = 0;
     double T = traj_time; // period
     double wn = (2.0 * M_PI) / T;
-    if(is_torque_desired_init == false)
-    {
-        x_desired[com_name](1)   = init_support_ee_pos[com_name](1) + pelv_dist * sin(wn * tick_pelv / hz_);                                          
-        dx_desired[com_name](1)  = wn * pelv_dist * cos(wn * tick_pelv / hz_);                                          
-        ddx_desired[com_name](1) = (-1.0) * wn * wn * pelv_dist * sin(wn * tick_pelv / hz_);                                          
-        tick_pelv++;
-    }
-
-    std::cout << "x_desired[com_name](1): " << x_desired[com_name](1) << std::endl;
+    x_desired[com_name](1) = init_support_ee_pos[com_name](1) + pelv_dist * sin(wn * tick_pelv / hz_);
+    dx_desired[com_name](1) = wn * pelv_dist * cos(wn * tick_pelv / hz_);
+    ddx_desired[com_name](1) = (-1.0) * wn * wn * pelv_dist * sin(wn * tick_pelv / hz_);
+    tick_pelv++;
 
     //--- Hand Test
     for (int idx = 2; idx < 3; idx++)
@@ -762,16 +754,13 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
     //--- Map Desired to base frame
     for (const auto& name : task_names)
     {
-        if (contact_mode_ == ContactIndicator::DoubleSupport)
-        {
-            x_desired.at(name)   = x_desired.at(name) - support_ee_pos[base_link_name];
-            dx_desired.at(name)  = dx_desired.at(name);
-            ddx_desired.at(name) = ddx_desired.at(name);
+        x_desired.at(name)   = x_desired.at(name) - support_ee_pos[base_link_name];
+        dx_desired.at(name)  = dx_desired.at(name);
+        ddx_desired.at(name) = ddx_desired.at(name);
 
-            R_desired.at(name)   = R_desired.at(name);
-            w_desired.at(name)   = w_desired.at(name);
-            dw_desired.at(name)  = dw_desired.at(name);
-        }
+        R_desired.at(name)   = R_desired.at(name);
+        w_desired.at(name)   = w_desired.at(name);
+        dw_desired.at(name)  = dw_desired.at(name);
     }
 
     //--- Increment Tick
@@ -786,8 +775,7 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
             { {lfoot_link_name,  TaskType::Position}, {lfoot_link_name, TaskType::Orientation}, {rfoot_link_name,  TaskType::Position}, {rfoot_link_name, TaskType::Orientation}  },
             { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
-            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation} },
-            { {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
+            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
     };
 
     std::set<std::string> task_names;
@@ -881,16 +869,13 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
     //--- Map Desired to base frame
     for (const auto& name : task_names)
     {
-        if (contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport)
-        {
-            x_desired.at(name)   = x_desired.at(name) - support_ee_pos[base_link_name];
-            dx_desired.at(name)  = dx_desired.at(name);
-            ddx_desired.at(name) = ddx_desired.at(name);
+        x_desired.at(name)   = x_desired.at(name) - support_ee_pos[base_link_name];
+        dx_desired.at(name)  = dx_desired.at(name);
+        ddx_desired.at(name) = ddx_desired.at(name);
 
-            R_desired.at(name)   = R_desired.at(name);
-            w_desired.at(name)   = w_desired.at(name);
-            dw_desired.at(name)  = dw_desired.at(name);
-        }
+        R_desired.at(name)   = R_desired.at(name);
+        w_desired.at(name)   = w_desired.at(name);
+        dw_desired.at(name)  = dw_desired.at(name);
     }
 
     //--- Increment Tick
@@ -980,7 +965,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
 
     //--- Swing & Support Feet Test
-    double step_length_x   = 0.4;
+    double step_length_x   = 0.2;
     double step_length_y   = 0.0;
     double step_length_yaw = 0.0;
  
