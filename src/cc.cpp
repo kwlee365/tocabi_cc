@@ -110,23 +110,23 @@ void CustomController::computeSlow()
             bool qp_status = true;
             qddot_qp.setZero(); contact_wrench_qp.setZero(contact_dim);
             qp_status = dyn_wbc_.computeDynamicWBC(qddot_qp, contact_wrench_qp);
-            torque_unbound = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF); 
+            torque_unbound = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF);
 
-            //--- Torque initialization
-            // static int tick_torque_desired_init = 0;
-            // if(is_torque_desired_init == true)
-            // {
-            //     for (int i = 0; i < MODEL_DOF; i++) {
-            //         torque_unbound(i) = DyrosMath::cubic(tick_torque_desired_init, 0, 2000, torque_init(i), torque_unbound(i), 0.0, 0.0);
-            //     }
+            // --- Torque initialization
+            static int tick_torque_desired_init = 0;
+            if(is_torque_desired_init == true)
+            {
+                for (int i = 0; i < MODEL_DOF; i++) {
+                    torque_unbound(i) = DyrosMath::cubic(tick_torque_desired_init, 0, 1000, torque_init(i), torque_unbound(i), 0.0, 0.0);
+                }
 
-            //     tick_torque_desired_init++;
+                tick_torque_desired_init++;
 
-            //     if(tick_torque_desired_init >= 2000) {
-            //         is_torque_desired_init = false;
-            //         std::cout << "##### INFO: INITIAL TORQUE SMOOTHING COMPLETE #####" << std::endl;
-            //     }
-            // }
+                if(tick_torque_desired_init >= 1000) {
+                    is_torque_desired_init = false;
+                    std::cout << "##### INFO: INITIAL TORQUE SMOOTHING COMPLETE #####" << std::endl;
+                }
+            }
 
             //--- Torque saturation
             Eigen::VectorQd torque_bound;   torque_bound.setZero();
@@ -255,7 +255,7 @@ void CustomController::loadParams()
     for (int i = 0; i < MODEL_DOF_VIRTUAL; ++i)
     {
         Kp_virtual(i) = kp_dyn_vec[i] * 0.0;
-        Kd_virtual(i) = kd_dyn_vec[i] * 2.0;
+        Kd_virtual(i) = kd_dyn_vec[i] * 1.5;
     }
 
     Kp_virtual_diag = Kp_virtual.asDiagonal();
@@ -289,17 +289,17 @@ void CustomController::loadParams()
     task_pos_Kp[rfoot_link_name](0) = 10.0;
     task_pos_Kp[rfoot_link_name](1) = 10.0;
     task_pos_Kp[rfoot_link_name](2) = 10.0;
-    task_pos_Kp[lhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[rhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
+    task_pos_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_pos_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_pos_Kp[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 
-    task_ori_Kp[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[base_link_name]  = 30.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[chest_link_name] = 50.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[lfoot_link_name] = 50.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[rfoot_link_name] = 50.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[lhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[rhand_link_name] = 50.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
 }
 
@@ -965,7 +965,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
 
     //--- Swing & Support Feet Test
-    double step_length_x   = 0.2;
+    double step_length_x   = 0.0;
     double step_length_y   = 0.0;
     double step_length_yaw = 0.0;
  
@@ -991,7 +991,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     if(contact_mode_ == ContactIndicator::DoubleSupport)
     {
         footstep_des = (init_support_ee_pos[swing_hip_link_name] + init_support_ee_pos[support_hip_link_name]).head(2) / 2.0;
-        footstep_des(1) += 0.03;
+        footstep_des(1) += 0.05;
         
         x_desired[lfoot_link_name] = init_support_ee_pos[lfoot_link_name];
         x_desired[rfoot_link_name] = init_support_ee_pos[rfoot_link_name];

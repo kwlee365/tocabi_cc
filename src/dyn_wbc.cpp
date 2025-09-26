@@ -77,7 +77,7 @@ bool DynWBC::computeDynamicWBC(Eigen::VectorVQd&qddot_qp, Eigen::VectorXd& conta
     {
         contact_wrench_sol  = X_.segment(0, contact_dim);
         qddot_sol = X_.segment(contact_dim, dof);
-        real_t score = QP_Dyn_Wbc.returnObjVal();
+        // real_t score = QP_Dyn_Wbc.returnObjVal();
         // std::cout << "##### Contact Wrench QP cost value: " << score << std::endl;
         qp_status = true;
     }

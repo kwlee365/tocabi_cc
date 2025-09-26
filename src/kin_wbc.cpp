@@ -141,7 +141,7 @@ void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
     if(QP_safety_filter.SolveQPoases(500, X_, true))
     {
         qdot_safety = X_.segment(0, dof_);
-        real_t score = QP_safety_filter.returnObjVal();
+        // real_t score = QP_safety_filter.returnObjVal();
         // std::cout << "##### Safety Filter QP cost value: " << score << std::endl;
         qp_status = true;
     }
