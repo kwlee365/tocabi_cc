@@ -20,12 +20,10 @@ void KinWBC::computeTaskSpaceKinematicWBC(
     contact_mode_ = contactMode;
 
     //--- Nullspace-based Prioritized Task Execution
-    int row_offset = 0;
     for (const auto& task_group : task_hierarchy)
     {
         int m = 3 * task_group.size();
         Eigen::MatrixXd J(m, dof_);
-        Eigen::MatrixXd Jdot(m, dof_);
         Eigen::VectorXd e(m), de(m), dde(m);
 
         for (size_t i = 0; i < task_group.size(); ++i)
@@ -62,21 +60,12 @@ void KinWBC::computeTaskSpaceKinematicWBC(
             }
         }
 
-        row_offset += m;  
-
         Eigen::MatrixXd J_pre = J * Ni;
         Eigen::MatrixXd J_pinv = DyrosMath::pinv_SVD(J_pre);
 
         qdot_des += J_pinv * (de  - J * qdot_des);
         Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - J_pinv * J_pre);
     }
-
-    // Eigen::MatrixXd CMM_yaw = base_CMM.bottomRows(1);
-    // Eigen::MatrixXd CMM_yaw_pre = CMM_yaw * Ni;
-    // Eigen::MatrixXd CMM_yaw_pinv = DyrosMath::pinv_SVD(CMM_yaw_pre);
-
-    // qdot_des += CMM_yaw_pinv * (- CMM_yaw * qdot_des);
-    // Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - CMM_yaw_pinv * CMM_yaw_pre);
 }
 
 void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,

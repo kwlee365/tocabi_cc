@@ -40,7 +40,7 @@ void CustomController::computeSlow()
         {
             loadParams();
 
-            motion_mode_ = TestMotionType::PelvHand;
+            motion_mode_ = TestMotionType::Walking;
 
             q_init_ = rd_.q_;
             WBC::SetContact(rd_, true, true);
@@ -75,7 +75,7 @@ void CustomController::computeSlow()
             }
 
             contactStateManager();
-            runTestMotion(1.5, 0.05, 0.2, 0.06, 0.6); 
+            runTestMotion(3.0, 0.05, 0.2, 0.06, 0.6); 
 
             //--- Whole-body Inverse Kinematics
             kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
@@ -117,6 +117,7 @@ void CustomController::computeSlow()
             torque_inv_dyn = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF);
 
             Eigen::VectorQd torque_pd; torque_pd.setZero();
+            // torque_pd = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
 
             Eigen::VectorQd torque_unbound; torque_unbound.setZero();
             torque_unbound = torque_inv_dyn + torque_pd;
@@ -303,8 +304,8 @@ void CustomController::loadParams()
     task_pos_Kp[com_name]        = 10.0 * Eigen::Vector3d::Ones();
 
     task_ori_Kp[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[chest_link_name] = 50.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[chest_link_name] = 10.0 * Eigen::Vector3d::Ones();
+    task_ori_Kp[head_link_name]  = 50.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
     task_ori_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
@@ -702,7 +703,7 @@ void CustomController::saveInitialState()
     torque_init = (Kp_diag * (q_init_des - rd_.q_)) - (Kd_diag * rd_.q_dot_);
 }
 
-void CustomController::runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& step_time)
+void CustomController::runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& step_duration)
 {
     switch (motion_mode_)
     {
@@ -713,7 +714,7 @@ void CustomController::runTestMotion(const double& traj_time, const double& pelv
             moveTaichiMotion(traj_time, pelv_dist, hand_dist, foot_height);
             break;
         case TestMotionType::Walking:
-            bipedalWalkingController(step_time, foot_height, target_vel_x_, target_vel_y_, target_vel_yaw_);
+            bipedalWalkingController(step_duration, foot_height, target_vel_x_, target_vel_y_, target_vel_yaw_);
             break;
         case TestMotionType::None:
         default:
@@ -727,7 +728,6 @@ void CustomController::movePelvHandPose(double traj_time, double pelv_dist, doub
     task_hierarchy= {
             { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
             { {lfoot_link_name,  TaskType::Position}, {lfoot_link_name, TaskType::Orientation}, {rfoot_link_name,  TaskType::Position}, {rfoot_link_name, TaskType::Orientation}  },
-            { {chest_link_name, TaskType::Orientation} },
             { {head_link_name,  TaskType::Orientation} },
             { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
     };
@@ -949,11 +949,12 @@ void CustomController::moveTaichiMotion(const double& traj_time, const double& p
     }
 }
 
-void CustomController::bipedalWalkingController(const double& step_time, const double& foot_height, const double& vx, const double& vy, const double& wz)
+void CustomController::bipedalWalkingController(const double& step_duration, const double& foot_height, const double& vx, const double& vy, const double& wz)
 {
     static int tick = 0;
     static int step_tick = 0;
     static int step_cnt = 0;
+    static double transition_duration = 2.0;
 
     if (is_walking_init == true)
     {
@@ -961,7 +962,6 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
         task_hierarchy = {
             {{base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation}},
             {{rfoot_link_name, TaskType::Position}, {rfoot_link_name, TaskType::Orientation}, {lfoot_link_name, TaskType::Position}, {lfoot_link_name, TaskType::Orientation}},
-            {{chest_link_name, TaskType::Orientation}},
             {{head_link_name, TaskType::Orientation}},
             {{lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation}},
         };
@@ -1035,11 +1035,10 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
         // step_length_x = vx;
     }
     
-    // footstep_des = footstep_planner_.planFootstep(swing_hip_pos_des, base_ee_v[base_link_name], step_time, vx, vy, wz);
     if(contact_mode_ == ContactIndicator::DoubleSupport)
     {
         footstep_des = (init_support_ee_pos[base_link_name] + init_support_ee_pos[base_link_name]).head(2) / 2.0;
-        footstep_des(1) += 0.05;
+        footstep_des(1) += 0.07;
         
         x_desired[lfoot_link_name] = init_support_ee_pos[lfoot_link_name];
         x_desired[rfoot_link_name] = init_support_ee_pos[rfoot_link_name];
@@ -1053,9 +1052,9 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
 
         x_desired[support_foot_link_name] = init_support_ee_pos[support_foot_link_name];
 
-        x_desired[swing_foot_link_name](0)  = cubicBezierPolynomial(step_tick, 0.0, step_time * hz_, init_support_ee_pos[swing_foot_link_name](0), swing_hip_pos_des(0), footstep_des(0));
-        x_desired[swing_foot_link_name](1)  = cubicBezierPolynomial(step_tick, 0.0, step_time * hz_, init_support_ee_pos[swing_foot_link_name](1), swing_hip_pos_des(1), footstep_des(1));
-        x_desired[swing_foot_link_name](2)  = cubicBezierPolynomial(step_tick, 0.0, step_time * hz_, init_support_ee_pos[swing_foot_link_name](2), foot_height,          init_support_ee_pos[swing_foot_link_name](2));
+        x_desired[swing_foot_link_name](0)  = cubicBezierPolynomial(step_tick, 0.0, step_duration * hz_, init_support_ee_pos[swing_foot_link_name](0), swing_hip_pos_des(0), footstep_des(0));
+        x_desired[swing_foot_link_name](1)  = cubicBezierPolynomial(step_tick, 0.0, step_duration * hz_, init_support_ee_pos[swing_foot_link_name](1), swing_hip_pos_des(1), footstep_des(1));
+        x_desired[swing_foot_link_name](2)  = cubicBezierPolynomial(step_tick, 0.0, step_duration * hz_, init_support_ee_pos[swing_foot_link_name](2), foot_height,          init_support_ee_pos[swing_foot_link_name](2));
 
         R_desired[swing_foot_link_name].setIdentity();
         R_desired[support_foot_link_name].setIdentity();
@@ -1068,7 +1067,9 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
 
     Eigen::Vector2d target_com_pos; target_com_pos.setZero();
     target_com_pos = footstep_des / 2.0;
-    com_planner_.planCenterOfMass(contact_mode_, init_support_ee_pos[base_link_name], init_support_ee_pos[support_foot_link_name].head(2), target_com_pos, step_tick / hz_, step_time,
+
+    double trajectory_duration = (contact_mode_ == ContactIndicator::DoubleSupport) ? transition_duration : step_duration;
+    com_planner_.planCenterOfMass(contact_mode_, init_support_ee_pos[base_link_name], init_support_ee_pos[support_foot_link_name].head(2), target_com_pos, step_tick / hz_, trajectory_duration,
                                   com_pos_desired, com_vel_desired, com_acc_desired);  
 
     x_desired[base_link_name].head(2) = com_pos_desired;
@@ -1115,7 +1116,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     static bool is_transfer_phase = true;
     if(is_transfer_phase == true)
     {
-        if(step_tick >= step_time * hz_)
+        if(step_tick >= transition_duration * hz_)
         {
             if(contact_mode_ == ContactIndicator::DoubleSupport)
             {
@@ -1135,7 +1136,7 @@ void CustomController::bipedalWalkingController(const double& step_time, const d
     }
     else
     {
-        if ( step_tick == step_time * hz_ - 1)    
+        if ( step_tick == step_duration * hz_ - 1)    
         {
             if(contact_mode_ == ContactIndicator::RightSingleSupport)
             {

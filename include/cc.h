@@ -219,8 +219,8 @@ public:
     void moveHandPose(double traj_time, double hand_dist);
     void movePelvHandPose(double traj_time, double pelv_dist, double hand_dist);
     void moveTaichiMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height);
-    void bipedalWalkingController(const double& step_time, const double& foot_height, const double& vx, const double& vy, const double& wz);
-    void runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& step_time);
+    void bipedalWalkingController(const double& step_duration, const double& foot_height, const double& vx, const double& vy, const double& wz);
+    void runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& step_duration);
     TestMotionType motion_mode_ = TestMotionType::None;
 
 
