@@ -2,28 +2,24 @@
 #ifndef DYN_WBC_H
 #define DYN_WBC_H
 
-#include <string>
-#include <map>
-#include <set>
-#include <vector>
 #include <Eigen/Dense>
 #include <qpOASES.hpp>
-// #include <casadi/casadi.hpp>
-#include <filesystem>
 #include "wholebody_functions.h"
 #include "utils.h"
-#include "task_definition.h"
 #include <iomanip>
 
 class DynWBC
 {
 public:
-    DynWBC(int dof);
+    DynWBC(RobotData& rd);
 
     //--- QP WBC 
     CQuadraticProgram QP_Dyn_Wbc;
 
-    bool computeDynamicWBC(Eigen::VectorVQd&qddot_qp, Eigen::VectorXd& contact_wrench);
+    void computeDynamicWBC();
+    void calcDesiredJointAcceleration();
+    void computeTotalTorqueCommand();
+
     void calcCostGrad();
     void calcCostHess();
     void calcEqualityConstraint();
@@ -31,17 +27,8 @@ public:
     void checkGradHessSize();
 
     void setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_);
-    void updateContactState(const ContactIndicator& contactMode);
-    void getRobotStates(const Eigen::VectorVQd &q_,
-                        const Eigen::VectorVQd &qdot_,
-                        const Eigen::VectorVQd &qdot_des_,
-                        const Eigen::VectorVQd &qddot_cmd_,
-                        const Eigen::MatrixVVd &Mass_,
-                        const Eigen::VectorVQd &Grav_,
-                        const Eigen::MatrixXd &base_contact_Jac_,
-                        const Eigen::MatrixXd &base_contact_Jac_dot_,
-                        const Eigen::VectorXd &base_contact_vw_,
-                        const Eigen::VectorXd &base_contact_pose_);
+    void updateContactState();
+    void updateRobotStates();
 
     Eigen::MatrixXd Hess;  // HESSIAN
     Eigen::VectorXd grad;  // GRADIENT
@@ -58,11 +45,12 @@ public:
     Eigen::VectorQd qddot_a_cmd;
     Eigen::VectorVQd qdot_des;
     Eigen::VectorVQd qddot_cmd;
-    Eigen::VectorXd qddot_sol; 
-    Eigen::VectorXd contact_wrench_sol; 
+    Eigen::VectorXd qddot_qp; 
+    Eigen::VectorXd contact_wrench_qp; 
 
 private:
-    int dof;
+    RobotData &rd_;
+
     bool is_gradhess_init_ = true;
     bool is_wbc_init_ = true;
     bool is_cannot_solve_qp_init_ = true;
@@ -76,10 +64,7 @@ private:
     Eigen::MatrixVVd M; 
     Eigen::VectorVQd G; 
     Eigen::MatrixXd base_contact_Jac;
-    Eigen::MatrixXd base_contact_Jac_dot;
     Eigen::MatrixXd base_contact_Jac_T;
-    Eigen::VectorXd base_contact_vw;
-    Eigen::VectorXd base_contact_pose;
     Eigen::MatrixXd Sa_T;
     Eigen::MatrixXd Sa;  
     Eigen::MatrixXd Sf;  
@@ -92,12 +77,11 @@ private:
     Eigen::VectorXd ubA_fric;
 
     double W_cwr = 1e-5;
-    double W_qddot_b = 1.0;
-    double W_energy = 1.0;
+    double W_qddot = 1.0;
+    double W_energy = 0.5;
 
-    ContactIndicator contact_mode = ContactIndicator::DoubleSupport;
-    ContactIndicator contact_mode_prev = ContactIndicator::DoubleSupport;
-    int contact_dim = 0;
+    int contact_dim = 12;
+    int contact_dim_prev = 12;
     int base_dim = 6;
 };
 

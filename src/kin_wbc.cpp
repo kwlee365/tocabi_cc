@@ -1,57 +1,52 @@
 #include "kin_wbc.h"
 
-KinWBC::KinWBC(int dof) : dof_(dof) {}
+using namespace TOCABI;
 
-void KinWBC::computeTaskSpaceKinematicWBC(
-    const std::vector<std::vector<TaskInfo>>& task_hierarchy,
-    const ContactIndicator& contactMode,
-    const std::map<std::string, Eigen::Vector3d>& x_desired, const std::map<std::string, Eigen::Vector3d>& dx_desired, const std::map<std::string, Eigen::Vector3d>& ddx_desired,
-    const std::map<std::string, Eigen::Matrix3d>& R_desired, const std::map<std::string, Eigen::Vector3d>& w_desired, const std::map<std::string, Eigen::Vector3d>& dw_desired,
-    const std::map<std::string, Eigen::Vector3d>& task_pos_Kp, const std::map<std::string, Eigen::Vector3d>& task_ori_Kp, 
-    const std::map<std::string, Eigen::Vector3d>& base_ee_pos, const std::map<std::string, Eigen::Matrix3d>& base_ee_rot,
-    const std::map<std::string, Eigen::Vector3d>& base_ee_v, const std::map<std::string, Eigen::Vector3d>& base_ee_w, 
-    const std::map<std::string, Eigen::Matrix3Vd>& base_Jac_v, const std::map<std::string, Eigen::Matrix3Vd>& base_Jac_w, const Eigen::Matrix6Vd& base_CMM, 
-    const Eigen::VectorVQd& qdot, Eigen::VectorVQd& qdot_des)
+KinWBC::KinWBC(RobotData& rd) : rd_(rd) 
+{
+    task_hierarchy = {
+        {{Pelvis, TaskType::Position} , {Pelvis, TaskType::Orientation}},
+        {{Left_Foot, TaskType::Position}, {Left_Foot, TaskType::Orientation}, {Right_Foot, TaskType::Position}, {Right_Foot, TaskType::Orientation}},
+        {{Head, TaskType::Orientation}},
+        {{Left_Hand, TaskType::Position}, {Left_Hand, TaskType::Orientation}, {Right_Hand, TaskType::Position}, {Right_Hand, TaskType::Orientation}}};
+}
+
+void KinWBC::computeTaskSpaceKinematicWBC()
 {
     //--- Initialization
-    qdot_des = Eigen::VectorVQd::Zero();
-    Eigen::MatrixXd Ni = Eigen::MatrixXd::Identity(dof_, dof_);
-    contact_mode_prev_ = contact_mode_;
-    contact_mode_ = contactMode;
+    qdot_des.setZero();
+    Eigen::MatrixVVd Ni = Eigen::MatrixVVd::Identity();
 
     //--- Nullspace-based Prioritized Task Execution
     for (const auto& task_group : task_hierarchy)
     {
         int m = 3 * task_group.size();
-        Eigen::MatrixXd J(m, dof_);
-        Eigen::VectorXd e(m), de(m), dde(m);
+        Eigen::MatrixXd J(m, MODEL_DOF_VIRTUAL);
+        Eigen::VectorXd e(m), de(m);
 
         for (size_t i = 0; i < task_group.size(); ++i)
         {
-            const auto& [name, type] = task_group[i];
+            const auto& [idx, type] = task_group[i];
+
             if (type == TaskType::Position)
             {
-                Eigen::Vector3d Kp_vec = task_pos_Kp.at(name); 
+                Eigen::Vector3d Kp_vec = rd_.link_[idx].pos_p_gain; 
 
-                J.block(3 * i, 0, 3, dof_) = base_Jac_v.at(name);
-                Eigen::Vector3d pos_err = x_desired.at(name)  - base_ee_pos.at(name);
-                Eigen::Vector3d vel_err = dx_desired.at(name) - base_ee_v.at(name); 
+                J.block(3 * i, 0, 3, MODEL_DOF_VIRTUAL) = rd_.link_[idx].local_Jac_v;
+                Eigen::Vector3d pos_err = rd_.link_[idx].x_traj - rd_.link_[idx].local_xpos;
 
-                e.segment<3>(3 * i)  = pos_err;
-                de.segment<3>(3 * i) = dx_desired.at(name) + Kp_vec.asDiagonal() * pos_err;
-                dde.segment<3>(3 * i) = ddx_desired.at(name);
+                // e.segment<3>(3 * i)   = pos_err;
+                de.segment<3>(3 * i)  = rd_.link_[idx].v_traj + pos_err;
             }
             else if (type == TaskType::Orientation)
             {
-                Eigen::Vector3d Kp_vec = task_ori_Kp.at(name);
+                Eigen::Vector3d Kp_vec = rd_.link_[idx].rot_p_gain; 
                 
-                J.block(3 * i, 0, 3, dof_) = base_Jac_w.at(name);
-                Eigen::Vector3d ori_err = -DyrosMath::getPhi(base_ee_rot.at(name), R_desired.at(name));
-                Eigen::Vector3d vel_err = (w_desired.at(name) - base_ee_w.at(name)); 
+                J.block(3 * i, 0, 3, MODEL_DOF_VIRTUAL) = rd_.link_[idx].local_Jac_w;
+                Eigen::Vector3d ori_err = -DyrosMath::getPhi(rd_.link_[idx].local_rotm, rd_.link_[idx].r_traj);
 
-                e.segment<3>(3 * i)   = ori_err;
-                de.segment<3>(3 * i)  = w_desired.at(name) + Kp_vec.asDiagonal() * ori_err;
-                dde.segment<3>(3 * i) = dw_desired.at(name);
+                // e.segment<3>(3 * i)   = ori_err;
+                de.segment<3>(3 * i)  = rd_.link_[idx].w_traj + ori_err;
             }
             else
             {
@@ -63,34 +58,30 @@ void KinWBC::computeTaskSpaceKinematicWBC(
         Eigen::MatrixXd J_pre = J * Ni;
         Eigen::MatrixXd J_pinv = DyrosMath::pinv_SVD(J_pre);
 
-        qdot_des += J_pinv * (de  - J * qdot_des);
-        Ni *= (Eigen::MatrixXd::Identity(dof_, dof_) - J_pinv * J_pre);
+        qdot_des += J_pinv * (de - J * qdot_des);
+        Ni *= (Eigen::MatrixVVd::Identity() - J_pinv * J_pre);
     }
+
+    qdot_des = safetyFilter();
+
+    rd_.q_dot_desired_virtual = qdot_des;
+    rd_.q_dot_desired = rd_.q_dot_desired_virtual.tail(MODEL_DOF);
+
+    rd_.q_desired_virtual = rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL) + rd_.q_dot_desired_virtual;
+    rd_.q_desired = rd_.q_desired_virtual.tail(MODEL_DOF);
 }
 
-void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
-                          const Eigen::VectorQd& q_pos_l_lim, const Eigen::VectorQd& q_pos_h_lim,
-                          const Eigen::VectorQd& q_vel_l_lim, const Eigen::VectorQd& q_vel_h_lim)
+Eigen::VectorVQd KinWBC::safetyFilter()
 {
     constraints_.clear();
     calcCostHess();
-    calcCostGrad(qdot_des);
+    calcCostGrad();
     calcEqualityConstraint();
-    calcInequalityConstraint(q, q_pos_l_lim, q_pos_h_lim, q_vel_l_lim, q_vel_h_lim);
-    if (contact_mode_ != contact_mode_prev_)
-    {
-        if(contact_mode_prev_ == ContactIndicator::DoubleSupport)
-        {
-            is_filter_init_ = true;
-            is_gradhess_init_ = true;
-            std::cout << "!!!!!!!!!!CONTACT TRIGGER!!!!!!!!!!";
-            std::cout << "Transition from [" << contactIndicatorToString(contact_mode_)
-                      << "] to [" << contactIndicatorToString(contact_mode_) << "]" << std::endl;
-        }
-    }
+    calcInequalityConstraint();
 
     total_num_state = constraints_.empty() ? 0 : constraints_[0].A.cols();
 
+    static bool is_filter_init_ = true;
     if(is_filter_init_ == true)
     {
         total_num_constraints = 0;
@@ -129,9 +120,7 @@ void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
     Eigen::VectorXd X_; X_.setZero(total_num_state);
     if(QP_safety_filter.SolveQPoases(500, X_, true))
     {
-        qdot_safety = X_.segment(0, dof_);
-        // real_t score = QP_safety_filter.returnObjVal();
-        // std::cout << "##### Safety Filter QP cost value: " << score << std::endl;
+        qdot_safety = X_.segment(0, MODEL_DOF_VIRTUAL);
         qp_status = true;
     }
     else
@@ -162,21 +151,22 @@ void KinWBC::safetyFilter(Eigen::VectorVQd& qdot_des, const Eigen::VectorVQd& q,
         }
 
 
+        qdot_safety.setZero();
         std::cout << "Kin WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
         qp_status = false;
     }
 
-    qdot_des = qdot_safety;
+    return (qdot_safety);
 }
 
 void KinWBC::calcCostHess()
 {
-    Hess.setIdentity(dof_, dof_);
+    Hess.setIdentity(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL);
 }
 
-void KinWBC::calcCostGrad(const Eigen::VectorVQd& qdot_des)
+void KinWBC::calcCostGrad()
 {
-    grad.setZero(dof_);
+    grad.setZero(MODEL_DOF_VIRTUAL);
     grad = (-1.0) * Hess * qdot_des;
 }
 
@@ -184,78 +174,83 @@ void KinWBC::calcEqualityConstraint()
 {
 }
 
-void KinWBC::calcInequalityConstraint(const Eigen::VectorVQd& q_, const Eigen::VectorQd& q_pos_l_lim_, const Eigen::VectorQd& q_pos_h_lim_, const Eigen::VectorQd& q_vel_l_lim_, const Eigen::VectorQd& q_vel_h_lim_)
+void KinWBC::calcInequalityConstraint()
 {
     //--- (1) Joint position constraints
-    Eigen::MatrixXd A_qpos; A_qpos.setZero(MODEL_DOF, dof_);
+    Eigen::MatrixXd A_qpos; A_qpos.setZero(MODEL_DOF, MODEL_DOF_VIRTUAL);
     A_qpos.rightCols(MODEL_DOF).setIdentity();
 
     double alpha_qpos = 1.0;
     double eps_qpos = 50.0;
     Eigen::VectorXd lbA_qpos; lbA_qpos.setZero(MODEL_DOF); 
     Eigen::VectorXd ubA_qpos; ubA_qpos.setZero(MODEL_DOF); 
-    Eigen::VectorQd q_a; q_a.setZero(MODEL_DOF);
-    q_a = q_.tail(MODEL_DOF);
     for(int i = 0; i < MODEL_DOF; i++)
     {
-        lbA_qpos(i) = min(max(alpha_qpos * (q_pos_l_lim_(i) - q_a(i)) + (1.0 / eps_qpos), q_vel_l_lim_(i)), q_vel_h_lim_(i));
-        ubA_qpos(i) = max(min(alpha_qpos * (q_pos_h_lim_(i) - q_a(i)) - (1.0 / eps_qpos), q_vel_h_lim_(i)), q_vel_l_lim_(i));
+        lbA_qpos(i) = min(max(alpha_qpos * (rd_.q_pos_l_lim(i) - rd_.q_(i)) + (1.0 / eps_qpos), rd_.q_vel_l_lim(i)), rd_.q_vel_h_lim(i));
+        ubA_qpos(i) = max(min(alpha_qpos * (rd_.q_pos_h_lim(i) - rd_.q_(i)) - (1.0 / eps_qpos), rd_.q_vel_h_lim(i)), rd_.q_vel_l_lim(i));
     }
     
     constraints_.push_back({A_qpos, lbA_qpos, ubA_qpos}); 
 
     //--- (2) Reachability constraints
-    const int m = static_cast<int>(grad_reachability_.size()); 
-    double alpha_reachability = 1.0;
-    double eps_reachability = 50.0;
-    Eigen::MatrixXd A_reachability; A_reachability.setZero(m, dof_);
-    Eigen::VectorXd lbA_reachability; lbA_reachability.setZero(m);
+    // const int m = static_cast<int>(grad_reachability_.size()); 
+    // double alpha_reachability = 1.0;
+    // double eps_reachability = 50.0;
+    // Eigen::MatrixXd A_reachability; A_reachability.setZero(m, MODEL_DOF_VIRTUAL);
+    // Eigen::VectorXd lbA_reachability; lbA_reachability.setZero(m);
 
-    for (int i = 0; i < m; ++i) {
-            A_reachability.block(i, 0, 1, dof_) = grad_reachability_[i];
-            lbA_reachability(i) = (-1.0) * alpha_reachability * cbf_reachability_[i] + (1.0 / eps_reachability) * grad_reachability_[i].squaredNorm();
-    }
+    // for (int i = 0; i < m; ++i) {
+    //         A_reachability.block(i, 0, 1, MODEL_DOF_VIRTUAL) = grad_reachability_[i];
+    //         lbA_reachability(i) = (-1.0) * alpha_reachability * cbf_reachability_[i] + (1.0 / eps_reachability) * grad_reachability_[i].squaredNorm();
+    // }
 
     // constraints_.push_back({   
     //     A_reachability,
     //     lbA_reachability,
     //     Eigen::VectorXd::Constant(A_reachability.rows(), std::numeric_limits<double>::infinity())
     // });
-}
+
+    // ---self, environment, reachability, ... + alpha (singularity)
+} 
 
 void KinWBC::getReachabilityConstraints(const std::vector<Eigen::MatrixXd> &J_reachability_, const std::vector<double> &h_reachability_)
 {
-    const int m = static_cast<int>(J_reachability_.size()); 
-    if (m == 0) return;
-    assert(m == static_cast<int>(h_reachability_.size()) && "Reachability Constraints's Hessian and gradients size mismatch");
+    // const int m = static_cast<int>(J_reachability_.size()); 
+    // if (m == 0) return;
+    // assert(m == static_cast<int>(h_reachability_.size()) && "Reachability Constraints's Hessian and gradients size mismatch");
 
-    const int n = static_cast<int>(J_reachability_[0].cols());
-    for (int i = 0; i < m; ++i) {
-        assert(J_reachability_[i].rows() == 1 && J_reachability_[i].cols() == n && "J_i must be 1 x n");
-    }
+    // const int n = static_cast<int>(J_reachability_[0].cols());
+    // for (int i = 0; i < m; ++i) {
+    //     assert(J_reachability_[i].rows() == 1 && J_reachability_[i].cols() == n && "J_i must be 1 x n");
+    // }
 
-    static bool is_reach_init_ = true;
-    if (is_reach_init_ == true) 
-    {
-        grad_reachability_.assign(m, Eigen::MatrixXd::Zero(1, n));
-        cbf_reachability_.assign(m, 0.0); 
+    // static bool is_reach_init_ = true;
+    // if (is_reach_init_ == true) 
+    // {
+    //     grad_reachability_.assign(m, Eigen::MatrixXd::Zero(1, n));
+    //     cbf_reachability_.assign(m, 0.0); 
 
-        is_reach_init_ = false;
-    }
+    //     is_reach_init_ = false;
+    // }
 
-    for (int i = 0; i < m; ++i) {
-        grad_reachability_[i] = J_reachability_[i];
-        cbf_reachability_[i]  = h_reachability_[i];
-    }
+    // for (int i = 0; i < m; ++i) {
+    //     grad_reachability_[i] = J_reachability_[i];
+    //     cbf_reachability_[i]  = h_reachability_[i];
+    // }
 }
 
 void KinWBC::checkGradHessSize()
 {
+    static bool is_gradhess_init_ = true;
     if(is_gradhess_init_ == true)
     {
         std::cout << "==============================================" << std::endl;
         std::cout << "===== KinWBC COST & CONSTRAINTS DIM INFO =====" << std::endl;
         std::cout << "==============================================" << std::endl;
+
+        std::cout << "total_num_state: " << total_num_state << std::endl;
+        std::cout << "total_num_constraints: " << total_num_constraints << std::endl;
+        std::cout << std::endl;
 
         std::cout << "Hess size: " << Hess.rows() << " x " << Hess.cols() << std::endl;
         std::cout << "grad size: " << grad.size() << std::endl;
@@ -265,23 +260,12 @@ void KinWBC::checkGradHessSize()
         std::cout << "lbA size: " << lbA_const.size() << std::endl;
         std::cout << "ubA size: " << ubA_const.size() << std::endl;
         std::cout << std::endl;
-    
-        // std::cout << "Hess: " << std::endl;
-        // std::cout << Hess << std::endl;
-        // std::cout << "grad: " << std::endl;
-        // std::cout << grad << std::endl;
-        // std::cout << std::endl;
-
-        // std::cout << "A_const: " << std::endl;
-        // std::cout << A_const << std::endl;
-        // std::cout << " " << std::endl;
-        // std::cout << "lbA_const: " << std::endl;
-        // std::cout << lbA_const.transpose() << std::endl;
-        // std::cout << " " << std::endl;
-        // std::cout << "ubA_const:  " << std::endl;
-        // std::cout << ubA_const.transpose() << std::endl;
-        // std::cout << " " << std::endl;
 
         is_gradhess_init_ = false;
     }
+}
+
+void KinWBC::setControlFrequency(double &hz)
+{
+    hz_ = hz;
 }

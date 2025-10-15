@@ -1,7 +1,32 @@
 #pragma once
 #include <Eigen/Dense>
 #include "math_type_define.h"
-#include "task_definition.h"
+
+enum class TaskType { Position, Orientation };
+
+struct TaskInfo {
+    int link_idx;
+    TaskType type;
+};
+
+enum class ContactIndicator {
+    DoubleSupport,
+    LeftSingleSupport,
+    RightSingleSupport
+};
+
+struct ConstraintMatrix {
+    Eigen::MatrixXd A;
+    Eigen::VectorXd lbA;
+    Eigen::VectorXd ubA;
+};
+
+enum class TaskMotionType {
+    None,
+    PelvHand,
+    Taichi,
+    Walking
+};
 
 Eigen::Vector3d AngvelToEulerRates(const Eigen::Vector3d& angVel, const Eigen::Vector3d& EulerAngle);
 Eigen::Vector3d getOrientationError(const Eigen::Matrix3d& current_rotation, const Eigen::Matrix3d& desired_rotation);

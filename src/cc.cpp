@@ -2,24 +2,17 @@
 
 using namespace TOCABI;
 
-ofstream dataCC1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC1.txt");
-ofstream dataCC2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC2.txt");
-ofstream dataCC3("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC3.txt");
-ofstream dataCC4("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC4.txt");
-ofstream dataCC5("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC5.txt");
-ofstream dataCC6("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC6.txt");
-
-CustomController::CustomController(RobotData &rd) : rd_(rd), kin_wbc_(MODEL_DOF_VIRTUAL),  dyn_wbc_(MODEL_DOF_VIRTUAL)
+CustomController::CustomController(RobotData &rd) : rd_(rd), cm_(rd), tm_(rd), kin_wbc_(rd), dyn_wbc_(rd)
 {
     //--- ROS Node Handle
     nh_cc_.setCallbackQueue(&queue_cc_);
     ControlVal_.setZero();
 
-    //--- Load Robot Model
-    std::string urdf_path, desc_package_path;
-    ros::param::get("/tocabi_controller/urdf_path", desc_package_path);
-    RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_, true, false);
-    RigidBodyDynamics::Addons::URDFReadFromFile(desc_package_path.c_str(), &model_clik, true, false);
+    //--- Class Initialization
+    cm_.setRobotModel();
+    tm_.setControlFrequency(hz_);
+    kin_wbc_.setControlFrequency(hz_);
+    dyn_wbc_.setRobotSystemParameters(0.8, 0.3, 0.16);
 
     //--- Joy Callback
     xbox_joy_sub_ = nh_cc_.subscribe<sensor_msgs::Joy>("/joy", 10, &CustomController::xBoxJoyCallback, this);
@@ -29,6 +22,22 @@ Eigen::VectorQd CustomController::getControl()
 {
     return ControlVal_;
 }
+/* ========================================================================================
+ * Real-time Control Thread
+ * Control Frequency : 2 kHz
+ * 
+ * Control Manager (cm_) : 
+ *      - Update Robot Model,
+ *      - Manage Robot State, Contact State, Dynamics
+ * 
+ * Task Manager (tm_) : 
+ *      - Update Task trajectory (PelvHand, Taichi, Walking)
+ * 
+ * Kinematic WBC (kin_wbc_) : 
+ *      - Compute desired joint velocity using Hierarchical Inverse Kinematics, 
+ *      - Safety Joint Velocity Filter
+ * ========================================================================================
+ */
 
 void CustomController::computeSlow()
 {
@@ -36,157 +45,23 @@ void CustomController::computeSlow()
     
     if (rd_.tc_.mode == 6)
     {   
-        if (is_mode_6_init == true)
-        {
-            loadParams();
-
-            motion_mode_ = TestMotionType::Walking;
-
-            q_init_ = rd_.q_;
-            WBC::SetContact(rd_, true, true);
-            
-            cout << "COMPUTESLOW MODE 6 IS NOW INITIALIZED" << endl;
-            cout << "TIME: "<< rd_.control_time_ << endl; 
-
-            is_mode_6_init = false;
-        }
-
         moveInitialPose();
-
-        rd_.torque_desired = (Kp_diag * (rd_.q_desired - rd_.q_)) - (Kd_diag * rd_.q_dot_);
     }
     else if (rd_.tc_.mode == 7)
     {
-        if(is_mode_7_working == true)
-        {
-            stateManager();
+        cm_.update();
 
-            if(is_mode_7_init == true)
-            {           
-                saveInitialState();
-                dyn_wbc_.setRobotSystemParameters(0.8,                  // Friction Coefficient // TODO: Put into YAML file.
-                                                  0.3,                  // Foot size
-                                                  0.16);                // Foot width
+        tm_.runTestMotion(motion_mode_, 3.0, 0.12, 0.2, 0.08, 0.6); 
 
-                cout << "COMPUTESLOW MODE 7 IS NOW INITIALIZED" << endl;
-                cout << "TIME: "<< rd_.control_time_ << endl; 
+        kin_wbc_.computeTaskSpaceKinematicWBC();
 
-                is_mode_7_init = false;
-            }
-
-            contactStateManager();
-            runTestMotion(3.0, 0.05, 0.2, 0.06, 0.6); 
-
-            //--- Whole-body Inverse Kinematics
-            kin_wbc_.computeTaskSpaceKinematicWBC(task_hierarchy,
-                                                  contact_mode_,
-                                                  x_desired, dx_desired, ddx_desired,
-                                                  R_desired, w_desired, dw_desired,
-                                                  task_pos_Kp, task_ori_Kp, 
-                                                  base_ee_pos, base_ee_rot,
-                                                  base_ee_v, base_ee_w,
-                                                  base_Jac_v, base_Jac_w, base_CMM, 
-                                                  qdot_, qdot_des);
-            kin_wbc_.safetyFilter(qdot_des, q_, joint_pos_limit_l_, joint_pos_limit_h_, joint_vel_limit_l_, joint_vel_limit_h_);
-
-            rd_.q_dot_desired = qdot_des.tail(MODEL_DOF);
-            q_des += qdot_des / hz_;
-            rd_.q_desired = q_des.tail(MODEL_DOF);
-
-            qddot_des.setZero();
-            qddot_des = Kd_virtual_diag * (qdot_des - qdot_);
-
-            //--- Contact Constrained Whole-body Control
-            dyn_wbc_.updateContactState(contact_mode_);
-            dyn_wbc_.getRobotStates(q_,
-                                    qdot_,
-                                    qdot_des,
-                                    qddot_des,
-                                    M_,
-                                    G_,
-                                    base_contact_Jac,
-                                    base_contact_Jac_dot,
-                                    base_contact_vw,
-                                    base_contact_pose);
-
-            bool qp_status = true;
-            qddot_qp.setZero(); contact_wrench_qp.setZero(contact_dim);
-            qp_status = dyn_wbc_.computeDynamicWBC(qddot_qp, contact_wrench_qp);
-
-            Eigen::VectorQd torque_inv_dyn; torque_inv_dyn.setZero();
-            torque_inv_dyn = (M_ * qddot_qp + G_ - base_contact_Jac.transpose() * contact_wrench_qp).tail(MODEL_DOF);
-
-            Eigen::VectorQd torque_pd; torque_pd.setZero();
-            // torque_pd = Kp_diag * (rd_.q_desired - rd_.q_) + Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
-
-            Eigen::VectorQd torque_unbound; torque_unbound.setZero();
-            torque_unbound = torque_inv_dyn + torque_pd;
-
-            // --- Torque initialization
-            static int tick_torque_desired_init = 0;
-            if(is_torque_desired_init == true)
-            {
-                for (int i = 0; i < MODEL_DOF; i++) {
-                    torque_unbound(i) = DyrosMath::cubic(tick_torque_desired_init, 0, 1000, torque_init(i), torque_unbound(i), 0.0, 0.0);
-                }
-
-                tick_torque_desired_init++;
-
-                if(tick_torque_desired_init >= 1000) {
-                    is_torque_desired_init = false;
-                    std::cout << "##### INFO: INITIAL TORQUE SMOOTHING COMPLETE #####" << std::endl;
-                }
-            }
-
-            //--- Torque saturation
-            Eigen::VectorQd torque_bound;   torque_bound.setZero();
-            for (int i = 0; i < MODEL_DOF; i++) {
-                torque_bound(i) = DyrosMath::minmax_cut(torque_unbound(i), -rd_.torque_limit(i), rd_.torque_limit(i));
-            }
-
-            //--- Torque transition when contact state changes
-            static int tick_transition = 0;
-            if(is_left_contact_transition == true || is_right_contact_transition == true)
-            {
-                is_torque_transition = true;
-                tick_transition = 0;
-                torque_transition = torque_bound;
-            }
-
-            if(is_torque_transition == true)
-            {
-                for (int i = 0; i < MODEL_DOF; i++) {
-                    torque_bound(i) = DyrosMath::cubic(tick_transition, 0, 200, torque_transition(i), torque_bound(i), 0.0, 0.0);
-                }
-
-                tick_transition++;
-
-                if(tick_transition >= 200) {
-                    is_torque_transition = false;
-                }
-            }
-
-            //--- safety
-            if(qp_status == true)
-            {
-                rd_.torque_desired = torque_bound;
-            }
-            else if (qp_status == false)
-            {
-                ROS_ERROR("QP feasibility violated. Emergency stop activated!");
-
-                rd_.q_desired = rd_.q_;
-                
-                is_mode_7_working = false;
-            }
-        }
+        dyn_wbc_.computeDynamicWBC();
+        dyn_wbc_.computeTotalTorqueCommand();
     }
     else
     {
-        rd_.torque_desired = (Kp_diag * (rd_.q_desired - rd_.q_)) - (Kd_diag * rd_.q_dot_);
+        rd_.torque_desired = (rd_.Kp_diag * (rd_.q_desired - rd_.q_)) - (rd_.Kd_diag * rd_.q_dot_);
     }
-
-    dataCC6 << rd_.torque_desired.transpose() << std::endl;
 }
 
 void CustomController::computeFast()
@@ -197,18 +72,12 @@ void CustomController::computePlanner()
 {
 }
 
-void CustomController::copyRobotData(RobotData &rd_l)
-{
-    std::memcpy(&rd_cc_, &rd_l, sizeof(RobotData));
-}
-
 void CustomController::loadParams()
 {
-    Kp.setZero(MODEL_DOF); Kp_diag.setZero(MODEL_DOF, MODEL_DOF);         
-    Kd.setZero(MODEL_DOF); Kd_diag.setZero(MODEL_DOF, MODEL_DOF);
-    Kp_virtual.setZero(MODEL_DOF_VIRTUAL); Kp_virtual_diag.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL);         
-    Kd_virtual.setZero(MODEL_DOF_VIRTUAL); Kd_virtual_diag.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL);
-
+    Kp.setZero(MODEL_DOF); Kd.setZero(MODEL_DOF);
+    Kp_virtual.setZero(MODEL_DOF_VIRTUAL); Kd_virtual.setZero(MODEL_DOF_VIRTUAL);
+    
+    
     std::vector<double> kp_vec, kd_vec;
     std::vector<double> kp_dyn_vec, kd_dyn_vec;
     std::vector<double> pos_low_deg, pos_high_deg;
@@ -264,81 +133,90 @@ void CustomController::loadParams()
     }
     for (int i = 0; i < MODEL_DOF_VIRTUAL; ++i)
     {
-        Kp_virtual(i) = kp_dyn_vec[i] * 0.0;
-        Kd_virtual(i) = kd_dyn_vec[i] * 1.5;
+        Kp_virtual(i) = kp_dyn_vec[i];
+        Kd_virtual(i) = kd_dyn_vec[i];
     }
 
-    Kp_virtual_diag = Kp_virtual.asDiagonal();
-    Kd_virtual_diag = Kd_virtual.asDiagonal();
-    Kp_diag = Kp.asDiagonal();
-    Kd_diag = Kd.asDiagonal();
+    rd_.Kp_virtual_diag = Kp_virtual.asDiagonal();
+    rd_.Kd_virtual_diag = Kd_virtual.asDiagonal();
+    rd_.Kp_diag = Kp.asDiagonal();
+    rd_.Kd_diag = Kd.asDiagonal();
 
     // Position Limits (convert deg to rad)
     for (int i = 0; i < MODEL_DOF; ++i)
     {
-        joint_pos_limit_l_(i) = pos_low_deg[i] * DEG2RAD;
-        joint_pos_limit_h_(i) = pos_high_deg[i] * DEG2RAD;
+        rd_.q_pos_l_lim(i) = pos_low_deg[i] * DEG2RAD;
+        rd_.q_pos_h_lim(i) = pos_high_deg[i] * DEG2RAD;
+        rd_.q_vel_l_lim(i) = vel_low[i];
+        rd_.q_vel_h_lim(i) = vel_high[i];
     }
 
-    //--- Velocity Limits
-    for (int i = 0; i < MODEL_DOF; ++i)
-    {
-        joint_vel_limit_l_(i) = vel_low[i];
-        joint_vel_limit_h_(i) = vel_high[i];
+    // Motion mode
+    int motion_mode_idx = 0;
+    nh_cc_.getParam("/tocabi_controller/motion_mode", motion_mode_idx);
+    if      (motion_mode_idx == 0){ motion_mode_ = TaskMotionType::None; }
+    else if (motion_mode_idx == 1){ motion_mode_ = TaskMotionType::PelvHand;}
+    else if (motion_mode_idx == 2){ motion_mode_ = TaskMotionType::Taichi; }
+    else if (motion_mode_idx == 3){ motion_mode_ = TaskMotionType::Walking; }
+    else {
+        ROS_ERROR("Motion mode idx error: got %d", motion_mode_idx);
+        assert(motion_mode_idx == 0 || motion_mode_idx == 1 || motion_mode_idx == 2 || motion_mode_idx == 3);
     }
+    const char *mode_name =
+        (motion_mode_ == TaskMotionType::None) ? "None" 
+      : (motion_mode_ == TaskMotionType::PelvHand) ? "PelvHand"
+      : (motion_mode_ == TaskMotionType::Taichi)   ? "Taichi"
+      : (motion_mode_ == TaskMotionType::Walking)  ? "Walking"
+      : "Unknown";
+
+    std::cout << "=====================================" << std::endl;
+    std::cout << "===== Motion Mode : " << mode_name << " ===== " << std::endl;
+    std::cout << "=====================================" << std::endl;
 
     //--- Task Gain
-    task_pos_Kp[base_link_name](0)  = 10.0;
-    task_pos_Kp[base_link_name](1)  = 10.0;
-    task_pos_Kp[base_link_name](2)  = 10.0;
-    task_pos_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[lfoot_link_name](0) = 10.0;
-    task_pos_Kp[lfoot_link_name](1) = 10.0;
-    task_pos_Kp[lfoot_link_name](2) = 10.0;
-    task_pos_Kp[rfoot_link_name](0) = 10.0;
-    task_pos_Kp[rfoot_link_name](1) = 10.0;
-    task_pos_Kp[rfoot_link_name](2) = 10.0;
-    task_pos_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_pos_Kp[com_name]        = 10.0 * Eigen::Vector3d::Ones();
+    rd_.link_[Pelvis].pos_p_gain     << 1.0, 1.0, 1.0;
+    rd_.link_[Upper_Body].pos_p_gain << 1.0, 1.0, 1.0;
+    rd_.link_[Left_Foot].pos_p_gain  << 1.0, 1.0, 1.0;
+    rd_.link_[Right_Foot].pos_p_gain << 1.0, 1.0, 1.0;
+    rd_.link_[Left_Hand].pos_p_gain  << 1.0, 1.0, 1.0;
+    rd_.link_[Right_Hand].pos_p_gain << 1.0, 1.0, 1.0;
+    rd_.link_[Pelvis].rot_p_gain     << 1.0, 1.0, 1.0;
+    rd_.link_[Upper_Body].rot_p_gain << 1.0, 0.0, 1.0;
+    rd_.link_[Head].rot_p_gain       << 1.0, 1.0, 1.0;
+    rd_.link_[Left_Foot].rot_p_gain  << 1.0, 1.0, 1.0;
+    rd_.link_[Right_Foot].rot_p_gain << 1.0, 1.0, 1.0;
+    rd_.link_[Left_Hand].rot_p_gain  << 1.0, 1.0, 1.0;
+    rd_.link_[Right_Hand].rot_p_gain << 1.0, 1.0, 1.0;
+}
 
-    task_ori_Kp[base_link_name]  = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[chest_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[head_link_name]  = 50.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[lfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[rfoot_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[lhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[rhand_link_name] = 10.0 * Eigen::Vector3d::Ones();
-    task_ori_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
+void CustomController::CustomControllerInit()
+{
+    static bool is_cc_init = true;
 
-    // task_pos_Kp[base_link_name]  = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[lfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[rfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[lhand_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[rhand_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_pos_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
+    if (is_cc_init == true)
+    {
+        loadParams();
 
-    // task_ori_Kp[base_link_name]  = 1.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[chest_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[head_link_name]  = 1.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[lfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[rfoot_link_name] = 1.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[lhand_link_name] = 5.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[rhand_link_name] = 5.0 * Eigen::Vector3d::Ones();
-    // task_ori_Kp[com_name]        = 1.0 * Eigen::Vector3d::Ones();
+        q_init_ = rd_.q_;
+        WBC::SetContact(rd_, true, true);
+        
+        cout << "CustomController IS NOW INITIALIZED" << endl;
+        cout << "TIME: "<< rd_.control_time_ << endl; 
+
+        is_cc_init = false;
+    }
 }
 
 void CustomController::moveInitialPose()
 {
+    CustomControllerInit();
+
     static int initial_tick = 0;
 
     q_init_des; q_init_des.setZero();
     q_init_des = q_init_;
 
-    if(motion_mode_ == TestMotionType::Walking)
+    if(motion_mode_ == TaskMotionType::Walking)
     {
         q_init_des(0) = 0.0; 
         q_init_des(1) = 0.0; 
@@ -393,799 +271,10 @@ void CustomController::moveInitialPose()
     }
     
     rd_.q_desired = DyrosMath::cubicVector<MODEL_DOF>(initial_tick, 0, 2.0 * hz_, q_init_, q_init_des, Eigen::VectorQd::Zero(), Eigen::VectorQd::Zero()); 
+    rd_.torque_desired = (rd_.Kp_diag * (rd_.q_desired - rd_.q_)) - (rd_.Kd_diag * rd_.q_dot_);
 
     initial_tick++;
 }
-
-void CustomController::stateManager()
-{
-    //--- Contact Change Trigger
-    if(is_left_contact_transition == true)
-    {
-        contact_mode_ = ContactIndicator::LeftSingleSupport;
-        WBC::SetContact(rd_, true, false);
-    }
-    else if(is_right_contact_transition == true)
-    {
-        contact_mode_ = ContactIndicator::RightSingleSupport;
-        WBC::SetContact(rd_, false, true);
-    }
-
-    //--- Robot States
-    Eigen::Vector3d base_pos = rd_.link_[link_index_map[base_link_name]].xpos; 
-    Eigen::Matrix3d base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[link_index_map[base_link_name]].rotm)(2)); 
-    for (const auto& [name, idx] : link_index_map)
-    {
-        //--- Global frame
-        Jac_v[name] = rd_.link_[idx].Jac().topRows(3);
-        Jac_w[name] = rd_.link_[idx].Jac().bottomRows(3);
-        ee_pos[name] = rd_.link_[idx].xpos;
-        ee_rot[name] = rd_.link_[idx].rotm;
-        ee_v[name] = rd_.link_[idx].v;
-        ee_w[name] = rd_.link_[idx].w;
-
-        //--- Base frame
-        base_Jac_v_prev[name] = base_Jac_v[name];
-        base_Jac_w_prev[name] = base_Jac_w[name];
-       
-        base_Jac_v[name]  = base_rot.transpose() * Jac_v[name];
-        base_Jac_w[name]  = base_rot.transpose() * Jac_w[name];
-        base_Jac[name].topRows(3)    = base_Jac_v[name];
-        base_Jac[name].bottomRows(3) = base_Jac_w[name];
-
-        Eigen::MatrixXd J_temp; J_temp.setZero(6, MODEL_DOF_VIRTUAL);
-        RigidBodyDynamics::CalcPointJacobian6D(model_clik, q_des, link_index_map[name], Eigen::Vector3d::Zero(), J_temp, true);
-        base_Jac_v_clik[name] = J_temp.bottomRows(3);
-        base_Jac_w_clik[name] = J_temp.topRows(3);
-
-        static bool is_jaco_dot_init = true;
-        if (is_jaco_dot_init == true)
-        {
-            base_Jac_v_prev[name] = base_Jac_v[name];
-            base_Jac_w_prev[name] = base_Jac_w[name];
-
-            is_jaco_dot_init = false;
-        }
-
-        base_Jac_v_dot[name]  = (base_Jac_v[name] - base_Jac_v_prev[name]) * hz_;
-        base_Jac_w_dot[name]  = (base_Jac_w[name] - base_Jac_w_prev[name]) * hz_;
-        base_Jac_dot[name].topRows(3)    = base_Jac_v_dot[name];
-        base_Jac_dot[name].bottomRows(3) = base_Jac_w_dot[name];
-
-        base_ee_pos[name] = base_rot.transpose() * (ee_pos[name] - base_pos);
-        base_ee_rot[name] = base_rot.transpose() *  ee_rot[name];                             
-        base_ee_v[name]   = base_rot.transpose() *  ee_v[name];                               
-        base_ee_w[name]   = base_rot.transpose() *  ee_w[name];
-    }
-
-    base_CMM.setZero();
-    base_CMM.topRows(3)    = base_rot.transpose() * rd_.CMM.topRows(3);
-    base_CMM.bottomRows(3) = base_rot.transpose() * rd_.CMM.bottomRows(3);
-
-    for (const auto& [name, idx] : link_index_map)
-    {
-        //--- Support frame
-        if(contact_mode_ == ContactIndicator::DoubleSupport)
-        {
-            support_ee_pos[name] = base_ee_pos[name] - (base_ee_pos[lfoot_link_name] + base_ee_pos[rfoot_link_name]) / 2.0;
-            support_ee_rot[name] = base_ee_rot[name];
-            support_ee_v[name]   = base_ee_v[name];
-            support_ee_w[name]   = base_ee_w[name]; 
-        }
-        else if (contact_mode_ == ContactIndicator::LeftSingleSupport)
-        {
-            support_ee_pos[name] = base_ee_pos[name] - base_ee_pos[lfoot_link_name];
-            support_ee_rot[name] = base_ee_rot[name];
-            support_ee_v[name]   = base_ee_v[name];
-            support_ee_w[name]   = base_ee_w[name]; 
-        }
-        else if (contact_mode_ == ContactIndicator::RightSingleSupport)
-        {
-            support_ee_pos[name] = base_ee_pos[name] - base_ee_pos[rfoot_link_name];
-            support_ee_rot[name] = base_ee_rot[name];
-            support_ee_v[name]   = base_ee_v[name];
-            support_ee_w[name]   = base_ee_w[name]; 
-        }
-        else
-        {
-            ROS_ERROR("Contact Indicator are assigned with something wrong value.");
-            assert(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport);
-        }
-    }
-
-    if(is_left_contact_transition == true)
-    {
-        if(motion_mode_ == TestMotionType::Walking)
-        {
-            init_support_ee_pos = support_ee_pos;
-            init_support_ee_rot = support_ee_rot;
-            init_support_ee_v   = support_ee_v;
-            init_support_ee_w   = support_ee_w;
-        }
-        is_left_contact_transition = false;
-    }
-    else if(is_right_contact_transition == true)
-    {
-        if(motion_mode_ == TestMotionType::Walking)
-        {
-            init_support_ee_pos = support_ee_pos;
-            init_support_ee_rot = support_ee_rot;
-            init_support_ee_v = support_ee_v;
-            init_support_ee_w = support_ee_w;
-        }
-        is_right_contact_transition = false;
-    }
-
-    Eigen::VectorQVQd base_q_virtual_;
-    base_q_virtual_.segment(0,3) = base_ee_pos[base_link_name];
-    
-    Quaterniond base_quat(base_ee_rot[base_link_name]);
-    base_quat.normalize();
-    
-    base_q_virtual_(3)  = base_quat.x();
-    base_q_virtual_(4)  = base_quat.y();
-    base_q_virtual_(5)  = base_quat.z();
-    base_q_virtual_(39) = base_quat.w();
-    
-    base_q_virtual_.segment(6, MODEL_DOF) = rd_.q_;
-
-    //--- Dynamics
-    M_.setZero(); G_.setZero(); M_inv_.setZero();
-    M_temp_.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL); G_temp_.setZero(MODEL_DOF_VIRTUAL);
-
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, base_q_virtual_, M_temp_, true);
-    M_ = M_temp_;
-    M_inv_ = M_.llt().solve(MatrixXd::Identity(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL));
-    
-    //--- Joint State w.r.t. base frame
-    q_.segment(0,3) = base_ee_pos[base_link_name];
-    q_.segment(3,3) = DyrosMath::rot2Euler(base_ee_rot[base_link_name]);
-    q_.segment(6,MODEL_DOF) = rd_.q_;
-    
-    qdot_.segment(0,3) = base_ee_v[base_link_name];
-    qdot_.segment(3,3) = base_ee_w[base_link_name];
-    qdot_.segment(6,MODEL_DOF) = rd_.q_dot_;
-    
-    RigidBodyDynamics::NonlinearEffects(model_, q_, qdot_, G_temp_);
-    G_ = G_temp_;
-
-    S_T.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF); S_T.bottomRows(MODEL_DOF).setIdentity();
-    S.setZero(MODEL_DOF, MODEL_DOF_VIRTUAL);   S = S_T.transpose();
-
-    // --- Reachability (# TODO: Put into kin_wbc.cpp)
-    struct ReachPair {
-        std::string name_A; std::string name_B; double max_dist{0.0};
-    };
-
-    const std::vector<ReachPair> reach_pairs = {
-        {lshoulder_link_name, lhand_link_name, 0.6},
-        {rshoulder_link_name, rhand_link_name, 0.6},
-    };
-
-    const int m = static_cast<int>(reach_pairs.size());
-
-    std::vector<Eigen::MatrixXd> J_reachability; J_reachability.reserve(m);                
-    std::vector<double> h_reachability; h_reachability.reserve(m);
-
-    for (int i = 0; i < m; ++i) {
-        const auto& pr = reach_pairs[i];
-        const int idA = link_index_map.at(pr.name_A);
-        const int idB = link_index_map.at(pr.name_B);
-
-        Eigen::MatrixXd J_; 
-        double dist_bwt_linkA_linkB = getSignedDistanceFunction(rd_.link_[idA], rd_.link_[idB], J_);
-
-        J_reachability.push_back(-J_);
-        h_reachability.push_back(-dist_bwt_linkA_linkB + pr.max_dist);
-    }
-
-    kin_wbc_.getReachabilityConstraints(J_reachability, h_reachability);
-}
-
-void CustomController::contactStateManager()
-{
-    //--- Contact Dimension
-    if(contact_mode_ == ContactIndicator::DoubleSupport)
-    {
-        contact_dim = 12;
-    }
-    else if(contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport)
-    {
-        contact_dim = 6;
-    }
-
-    base_contact_Jac.setZero(contact_dim, MODEL_DOF_VIRTUAL);
-    base_contact_Jac_dot.setZero(contact_dim, MODEL_DOF_VIRTUAL);
-    base_contact_vw.setZero(contact_dim);
-    base_contact_pose.setZero(contact_dim);
-
-    if(contact_mode_ == ContactIndicator::DoubleSupport)
-    {
-        base_contact_Jac.block(0, 0, 6, MODEL_DOF_VIRTUAL) = base_Jac[lfoot_link_name]; 
-        base_contact_Jac.block(6, 0, 6, MODEL_DOF_VIRTUAL) = base_Jac[rfoot_link_name]; 
-
-        base_contact_Jac_dot.block(0, 0, 6, MODEL_DOF_VIRTUAL) = base_Jac_dot[lfoot_link_name]; 
-        base_contact_Jac_dot.block(6, 0, 6, MODEL_DOF_VIRTUAL) = base_Jac_dot[rfoot_link_name];
-
-        base_contact_vw.segment(0, 3) = base_ee_v[lfoot_link_name];
-        base_contact_vw.segment(3, 2) = base_ee_w[lfoot_link_name].head(2);
-        base_contact_vw.segment(6, 3) = base_ee_v[rfoot_link_name];
-        base_contact_vw.segment(9, 2) = base_ee_w[rfoot_link_name].head(2);
-
-        base_contact_pose.segment(3, 3) = -DyrosMath::getPhi(base_ee_rot[lfoot_link_name], Eigen::Matrix3d::Identity());
-        base_contact_pose.segment(9, 3) = -DyrosMath::getPhi(base_ee_rot[rfoot_link_name], Eigen::Matrix3d::Identity());
-    }
-    else if(contact_mode_ == ContactIndicator::LeftSingleSupport)
-    {
-        base_contact_Jac = base_Jac[lfoot_link_name]; 
-
-        base_contact_Jac_dot = base_Jac_dot[lfoot_link_name]; 
-
-        base_contact_vw.segment(0, 3) = base_ee_v[lfoot_link_name];
-        base_contact_vw.segment(3, 2) = base_ee_w[lfoot_link_name].head(2);
-        base_contact_pose.segment(3, 3) = -DyrosMath::getPhi(base_ee_rot[lfoot_link_name], Eigen::Matrix3d::Identity());
-
-    }
-    else if(contact_mode_ == ContactIndicator::RightSingleSupport)
-    {
-        base_contact_Jac = base_Jac[rfoot_link_name]; 
-
-        base_contact_Jac_dot = base_Jac_dot[rfoot_link_name]; 
-
-        base_contact_vw.segment(0, 3) = base_ee_v[rfoot_link_name];
-        base_contact_vw.segment(3, 2) = base_ee_w[rfoot_link_name].head(2);
-        base_contact_pose.segment(3, 3) = -DyrosMath::getPhi(base_ee_rot[rfoot_link_name], Eigen::Matrix3d::Identity());
-    }
-    else
-    {
-        ROS_ERROR("Contact Indicator are assigned with something wrong value.");
-        assert(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport);
-    }
-
-    base_contact_lambda.setZero(contact_dim, contact_dim);
-    base_contact_lambda = (base_contact_Jac * M_inv_ * base_contact_Jac.transpose()).llt().solve(MatrixXd::Identity(contact_dim, contact_dim));
-
-    base_contact_Jac_inv_T.setZero(contact_dim, MODEL_DOF_VIRTUAL);
-    base_contact_Jac_inv_T = base_contact_lambda * base_contact_Jac * M_inv_;
-
-    base_contact_N.setZero();
-    base_contact_N = MatrixXd::Identity(MODEL_DOF_VIRTUAL, MODEL_DOF_VIRTUAL) - base_contact_Jac.transpose() * base_contact_Jac_inv_T;
-}
-
-void CustomController::saveInitialState()
-{
-    init_ee_pos = ee_pos;
-    init_ee_rot = ee_rot;
-    init_ee_v = ee_v;
-    init_ee_w = ee_w;
-
-    init_base_ee_pos = base_ee_pos;
-    init_base_ee_rot = base_ee_rot;
-    init_base_ee_v = base_ee_v;
-    init_base_ee_w = base_ee_w;
-
-    init_support_ee_pos = support_ee_pos;
-    init_support_ee_rot = support_ee_rot;
-    init_support_ee_v = support_ee_v;
-    init_support_ee_w = support_ee_w;
-
-    rd_.q_desired = q_init_des;
-
-    q_des.segment(6, MODEL_DOF)= q_init_des;
-    dq_des.setZero(); 
-    qdot_des.setZero();
-    qddot_des.setZero(); 
-
-    for (const auto& [name, idx] : link_index_map)
-    {
-        x_desired[name]   = init_support_ee_pos[name];
-        dx_desired[name]  = Eigen::Vector3d::Zero();
-        ddx_desired[name] = Eigen::Vector3d::Zero();
-
-        R_desired[name]   = init_support_ee_rot[name];
-        w_desired[name]   = Eigen::Vector3d::Zero();
-        dw_desired[name]  = Eigen::Vector3d::Zero();
-
-        Eigen::MatrixXd J_temp; J_temp.setZero(6, MODEL_DOF_VIRTUAL);
-        RigidBodyDynamics::CalcPointJacobian6D(model_clik, q_des, link_urdf_id_map[name], Eigen::Vector3d::Zero(), J_temp, true);
-        base_Jac_v_clik[name] = J_temp.bottomRows(3);
-        base_Jac_w_clik[name] = J_temp.topRows(3);
-
-        std::cout << "name: " << name << std::endl;
-        std::cout << "base_Jac_v_clik[name]: " << std::endl;
-        std::cout << base_Jac_v_clik[name] << std::endl;
-        std::cout << "base_Jac_w_clik[name]: " << std::endl;
-        std::cout << base_Jac_w_clik[name] << std::endl;
-    }
-
-
-    
-    torque_init = (Kp_diag * (q_init_des - rd_.q_)) - (Kd_diag * rd_.q_dot_);
-}
-
-void CustomController::runTestMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height, const double& step_duration)
-{
-    switch (motion_mode_)
-    {
-        case TestMotionType::PelvHand:
-            movePelvHandPose(traj_time, pelv_dist, hand_dist);
-            break;
-        case TestMotionType::Taichi:
-            moveTaichiMotion(traj_time, pelv_dist, hand_dist, foot_height);
-            break;
-        case TestMotionType::Walking:
-            bipedalWalkingController(step_duration, foot_height, target_vel_x_, target_vel_y_, target_vel_yaw_);
-            break;
-        case TestMotionType::None:
-        default:
-            break;
-    }
-}
-
-void CustomController::movePelvHandPose(double traj_time, double pelv_dist, double hand_dist)
-{
-    // --- Set Task Hierarchy
-    task_hierarchy= {
-            { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
-            { {lfoot_link_name,  TaskType::Position}, {lfoot_link_name, TaskType::Orientation}, {rfoot_link_name,  TaskType::Position}, {rfoot_link_name, TaskType::Orientation}  },
-            { {head_link_name,  TaskType::Orientation} },
-            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
-    };
-
-    std::set<std::string> task_names;
-    for (const auto& task_group : task_hierarchy)
-    {
-        for (const auto& [name, type] : task_group)
-        {
-            if (task_names.count(name))
-                continue;
-            task_names.insert(name);
-        }
-    }
-
-    //--- Initialization
-    static int tick = 0;
-    for (const auto& name : task_names)
-    {
-        x_desired.at(name) = init_support_ee_pos.at(name);
-        dx_desired.at(name).setZero();
-        ddx_desired.at(name).setZero();
-
-        R_desired.at(name) = init_support_ee_rot.at(name);
-        w_desired.at(name).setZero();
-        dw_desired.at(name).setZero();
-    }
-
-    //--- Pelvis Test
-    static int tick_pelv = 0;
-    double T = traj_time; // period
-    double wn = (2.0 * M_PI) / T;
-    x_desired[base_link_name](1) = init_support_ee_pos[base_link_name](1) + pelv_dist * sin(wn * tick_pelv / hz_);
-    dx_desired[base_link_name](1) = wn * pelv_dist * cos(wn * tick_pelv / hz_);
-    ddx_desired[base_link_name](1) = (-1.0) * wn * wn * pelv_dist * sin(wn * tick_pelv / hz_);
-    tick_pelv++;
-
-    //--- Hand Test
-    for (int idx = 2; idx < 3; idx++)
-    {
-        x_desired[lhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
-                                                        init_support_ee_pos[lhand_link_name](idx), 
-                                                        init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
-                                                        0.0, 0.0);
-
-        dx_desired[lhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[lhand_link_name](idx), 
-                                                            init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
-                                                            0.0, 0.0);
-
-        ddx_desired[lhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[lhand_link_name](idx), 
-                                                            init_support_ee_pos[lhand_link_name](idx) + hand_dist, 
-                                                            0.0, 0.0);
-
-        x_desired[rhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_, 
-                                                        init_support_ee_pos[rhand_link_name](idx), 
-                                                        init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
-                                                        0.0, 0.0);
-
-        dx_desired[rhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[rhand_link_name](idx), 
-                                                            init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
-                                                            0.0, 0.0);
-
-        ddx_desired[rhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_, 
-                                                            init_support_ee_pos[rhand_link_name](idx), 
-                                                            init_support_ee_pos[rhand_link_name](idx) - hand_dist, 
-                                                            0.0, 0.0);
-    }
-
-    //--- Data Logging
-    dataCC1 << x_desired[base_link_name].transpose()  << " " << support_ee_pos[base_link_name].transpose() << std::endl;
-    dataCC2 << x_desired[rhand_link_name].transpose() << " " << support_ee_pos[rhand_link_name].transpose() << std::endl;
-    dataCC3 << x_desired[lhand_link_name].transpose() << " " << support_ee_pos[lhand_link_name].transpose() << std::endl;
-    
-    //--- Map Desired to base frame
-    for (const auto& name : task_names)
-    {
-        x_desired.at(name)   = x_desired.at(name) - support_ee_pos[base_link_name];
-        dx_desired.at(name)  = dx_desired.at(name);
-        ddx_desired.at(name) = ddx_desired.at(name);
-
-        R_desired.at(name)   = R_desired.at(name);
-        w_desired.at(name)   = w_desired.at(name);
-        dw_desired.at(name)  = dw_desired.at(name);
-    }
-
-    //--- Increment Tick
-    tick++;
-}
-
-void CustomController::moveTaichiMotion(const double& traj_time, const double& pelv_dist, const double& hand_dist, const double& foot_height)
-{
-    static int tick = 0;
-    task_hierarchy= {
-            { {base_link_name,  TaskType::Position}, {base_link_name, TaskType::Orientation} },
-            { {lfoot_link_name,  TaskType::Position}, {lfoot_link_name, TaskType::Orientation}, {rfoot_link_name,  TaskType::Position}, {rfoot_link_name, TaskType::Orientation}  },
-            { {chest_link_name, TaskType::Orientation} },
-            { {head_link_name,  TaskType::Orientation} },
-            { {lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation} }
-    };
-
-    std::set<std::string> task_names;
-    for (const auto& task_group : task_hierarchy)
-    {
-        for (const auto& [name, type] : task_group)
-        {
-            if (task_names.count(name))
-                continue;
-            task_names.insert(name);
-        }
-    }
-
-    //--- Initialization
-    for (const auto& name : task_names)
-    {
-        x_desired.at(name) = init_support_ee_pos.at(name);
-        dx_desired.at(name).setZero();
-        ddx_desired.at(name).setZero();
-
-        R_desired.at(name) = init_support_ee_rot.at(name);
-        w_desired.at(name).setZero();
-        dw_desired.at(name).setZero();
-    }
-
-    //--- Pelvis Test
-    Eigen::Vector3d pelv_traj; pelv_traj.setZero();
-    pelv_traj = DyrosMath::QuinticSpline(tick, 0, traj_time * hz_, 
-                                         init_support_ee_pos[base_link_name](1), 0.0, 0.0, 
-                                         init_support_ee_pos[base_link_name](1) + pelv_dist, 0.0, 0.0);
-
-    x_desired[base_link_name](1)   = pelv_traj(0);
-    dx_desired[base_link_name](1)  = pelv_traj(1);
-    ddx_desired[base_link_name](1) = pelv_traj(2);
-
-    //--- Hand Test
-    for (int idx = 1; idx < 3; idx++)
-    {
-        x_desired[lhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_,
-                                                           init_support_ee_pos[lhand_link_name](idx),
-                                                           init_support_ee_pos[lhand_link_name](idx) + hand_dist,
-                                                           0.0, 0.0);
-
-        dx_desired[lhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_,
-                                                               init_support_ee_pos[lhand_link_name](idx),
-                                                               init_support_ee_pos[lhand_link_name](idx) + hand_dist,
-                                                               0.0, 0.0);
-
-        ddx_desired[lhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_,
-                                                                 init_support_ee_pos[lhand_link_name](idx),
-                                                                 init_support_ee_pos[lhand_link_name](idx) + hand_dist,
-                                                                 0.0, 0.0);
-
-        x_desired[rhand_link_name](idx) = DyrosMath::cubic(tick, 0, traj_time * hz_,
-                                                           init_support_ee_pos[rhand_link_name](idx),
-                                                           init_support_ee_pos[rhand_link_name](idx) - hand_dist,
-                                                           0.0, 0.0);
-
-        dx_desired[rhand_link_name](idx) = DyrosMath::cubicDot(tick, 0, traj_time * hz_,
-                                                               init_support_ee_pos[rhand_link_name](idx),
-                                                               init_support_ee_pos[rhand_link_name](idx) - hand_dist,
-                                                               0.0, 0.0);
-
-        ddx_desired[rhand_link_name](idx) = DyrosMath::cubicDdot(tick, 0, traj_time * hz_,
-                                                                 init_support_ee_pos[rhand_link_name](idx),
-                                                                 init_support_ee_pos[rhand_link_name](idx) - hand_dist,
-                                                                 0.0, 0.0);
-    }
-
-    // //--- Swing Foot Test
-    x_desired[rfoot_link_name] = init_support_ee_pos[rfoot_link_name];
-    R_desired[rfoot_link_name] = init_support_ee_rot[rfoot_link_name];
-
-    x_desired[rfoot_link_name](2) = DyrosMath::cubic(tick, traj_time * hz_, 2.0 * traj_time * hz_, 
-                                                        init_support_ee_pos[rfoot_link_name](2), 
-                                                        init_support_ee_pos[rfoot_link_name](2) + foot_height, 
-                                                        0.0, 0.0);
-
-    dx_desired[rfoot_link_name](2) = DyrosMath::cubicDot(tick, traj_time * hz_, 2.0 * traj_time * hz_, 
-                                                            init_support_ee_pos[rfoot_link_name](2), 
-                                                            init_support_ee_pos[rfoot_link_name](2) + foot_height, 
-                                                            0.0, 0.0);
-
-    ddx_desired[rfoot_link_name](2) = DyrosMath::cubicDdot(tick, traj_time * hz_, 2.0 * traj_time * hz_, 
-                                                            init_support_ee_pos[rfoot_link_name](2), 
-                                                            init_support_ee_pos[rfoot_link_name](2) + foot_height, 
-                                                            0.0, 0.0);
-                                                            
-    dataCC1 << x_desired[base_link_name].transpose()  << " " << support_ee_pos[base_link_name].transpose() << std::endl;
-    dataCC2 << x_desired[rfoot_link_name].transpose()  << " " << support_ee_pos[rfoot_link_name].transpose() << std::endl;
-    dataCC3 << x_desired[lfoot_link_name].transpose()  << " " << support_ee_pos[lfoot_link_name].transpose() << std::endl;
-
-    //--- Map Desired to base frame
-    for (const auto& name : task_names)
-    {
-        x_desired.at(name)   = x_desired.at(name) - support_ee_pos[base_link_name];
-        dx_desired.at(name)  = dx_desired.at(name);
-        ddx_desired.at(name) = ddx_desired.at(name);
-
-        R_desired.at(name)   = R_desired.at(name);
-        w_desired.at(name)   = w_desired.at(name);
-        dw_desired.at(name)  = dw_desired.at(name);
-    }
-
-    //--- Increment Tick
-    tick++;
-
-    if ( tick == traj_time * hz_ - 1)    {
-        if(contact_mode_ == ContactIndicator::DoubleSupport)
-        {
-            is_left_contact_transition = true;  // Update state transition next tick
-        }
-        else
-        {
-            ROS_ERROR("Contact Indicator are assigned with something wrong value.");
-            assert(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport);
-        }
-    }
-}
-
-void CustomController::bipedalWalkingController(const double& step_duration, const double& foot_height, const double& vx, const double& vy, const double& wz)
-{
-    static int tick = 0;
-    static int step_tick = 0;
-    static int step_cnt = 0;
-    static double transition_duration = 2.0;
-
-    if (is_walking_init == true)
-    {
-        //--- Define Task Hierarchy
-        task_hierarchy = {
-            {{base_link_name, TaskType::Position}, {base_link_name, TaskType::Orientation}},
-            {{rfoot_link_name, TaskType::Position}, {rfoot_link_name, TaskType::Orientation}, {lfoot_link_name, TaskType::Position}, {lfoot_link_name, TaskType::Orientation}},
-            {{head_link_name, TaskType::Orientation}},
-            {{lhand_link_name, TaskType::Position}, {lhand_link_name, TaskType::Orientation}, {rhand_link_name, TaskType::Position}, {rhand_link_name, TaskType::Orientation}},
-        };
-
-        for (const auto &task_group : task_hierarchy)
-        {
-            for (const auto &[name, type] : task_group)
-            {
-                if (task_names.count(name))
-                    continue;
-                task_names.insert(name);
-            }
-        }
-
-        //--- Initialization
-        for (const auto &name : task_names)
-        {
-            x_desired.at(name) = init_support_ee_pos.at(name);
-            dx_desired.at(name).setZero();
-            ddx_desired.at(name).setZero();
-
-            R_desired.at(name) = init_support_ee_rot.at(name);
-            w_desired.at(name).setZero();
-            dw_desired.at(name).setZero();
-        }
-        
-        is_walking_init = false;
-    }
-
-    std::string support_foot_link_name, support_hip_link_name, swing_foot_link_name, swing_hip_link_name;
-    if(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport)
-    {
-        support_foot_link_name = lfoot_link_name;
-        support_hip_link_name  = lhip_link_name;
-        swing_foot_link_name   = rfoot_link_name;
-        swing_hip_link_name    = rhip_link_name;
-    }
-    else if(contact_mode_ == ContactIndicator::RightSingleSupport)
-    {
-        support_foot_link_name = rfoot_link_name;
-        support_hip_link_name = rhip_link_name;
-        swing_foot_link_name   = lfoot_link_name;
-        swing_hip_link_name    = lhip_link_name;
-    }
-    else
-    {
-        ROS_ERROR("Contact Indicator are assigned with something wrong value.");
-        assert(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport);
-    }
-
-    //--- Swing & Support Feet Test
-    double step_length_x   = 0.2; if(step_cnt == 1) {step_length_x = step_length_x / 2.0;}
-    double step_length_y   = 0.0;
-    double step_length_yaw = 0.0;
- 
-    Eigen::Vector2d footstep_des; footstep_des.setZero();
-    Eigen::Vector3d swing_hip_pos_des; swing_hip_pos_des.setZero();
-    if(contact_mode_ == ContactIndicator::LeftSingleSupport)
-    {
-        swing_hip_pos_des = support_ee_pos[swing_hip_link_name];
-        swing_hip_pos_des(0) -= 0.06;
-        swing_hip_pos_des(1) -= 0.03; 
-        // step_length_x = vx;
-    }
-    else if(contact_mode_ == ContactIndicator::RightSingleSupport)
-    {
-        swing_hip_pos_des = support_ee_pos[swing_hip_link_name];
-        swing_hip_pos_des(0) -= 0.06;
-        swing_hip_pos_des(1) += 0.03; 
-
-        // step_length_x = vx;
-    }
-    
-    if(contact_mode_ == ContactIndicator::DoubleSupport)
-    {
-        footstep_des = (init_support_ee_pos[base_link_name] + init_support_ee_pos[base_link_name]).head(2) / 2.0;
-        footstep_des(1) += 0.07;
-        
-        x_desired[lfoot_link_name] = init_support_ee_pos[lfoot_link_name];
-        x_desired[rfoot_link_name] = init_support_ee_pos[rfoot_link_name];
-
-        R_desired[lfoot_link_name].setIdentity();
-        R_desired[rfoot_link_name].setIdentity();
-    }
-    else
-    {
-        footstep_des << init_support_ee_pos[swing_foot_link_name](0) + step_length_x, init_support_ee_pos[swing_foot_link_name](1) + step_length_y;
-
-        x_desired[support_foot_link_name] = init_support_ee_pos[support_foot_link_name];
-
-        x_desired[swing_foot_link_name](0)  = cubicBezierPolynomial(step_tick, 0.0, step_duration * hz_, init_support_ee_pos[swing_foot_link_name](0), swing_hip_pos_des(0), footstep_des(0));
-        x_desired[swing_foot_link_name](1)  = cubicBezierPolynomial(step_tick, 0.0, step_duration * hz_, init_support_ee_pos[swing_foot_link_name](1), swing_hip_pos_des(1), footstep_des(1));
-        x_desired[swing_foot_link_name](2)  = cubicBezierPolynomial(step_tick, 0.0, step_duration * hz_, init_support_ee_pos[swing_foot_link_name](2), foot_height,          init_support_ee_pos[swing_foot_link_name](2));
-
-        R_desired[swing_foot_link_name].setIdentity();
-        R_desired[support_foot_link_name].setIdentity();
-    }
-    
-    //--- CoM Test 
-    Eigen::Vector2d com_pos_desired; com_pos_desired.setZero();
-    Eigen::Vector2d com_vel_desired; com_vel_desired.setZero();
-    Eigen::Vector2d com_acc_desired; com_acc_desired.setZero();
-
-    Eigen::Vector2d target_com_pos; target_com_pos.setZero();
-    target_com_pos = footstep_des / 2.0;
-
-    double trajectory_duration = (contact_mode_ == ContactIndicator::DoubleSupport) ? transition_duration : step_duration;
-    com_planner_.planCenterOfMass(contact_mode_, init_support_ee_pos[base_link_name], init_support_ee_pos[support_foot_link_name].head(2), target_com_pos, step_tick / hz_, trajectory_duration,
-                                  com_pos_desired, com_vel_desired, com_acc_desired);  
-
-    x_desired[base_link_name].head(2) = com_pos_desired;
-    dx_desired[base_link_name].head(2) = com_vel_desired;
-    ddx_desired[base_link_name].head(2) = com_acc_desired;
-    x_desired[base_link_name](2) = 0.765;
-
-    // x_desired[base_link_name].head(2) = com_pos_temp;
-
-    // x_desired[base_link_name](2) = 0.75;
-    // dx_desired[base_link_name](0) = vx;
-    // dx_desired[base_link_name](1) = vy;
-
-    R_desired[base_link_name].setIdentity();
-    w_desired[base_link_name](2) = wz;
-
-    dataCC1 << x_desired[base_link_name].transpose()  << " " << support_ee_pos[base_link_name].transpose() << std::endl;
-    dataCC2 << x_desired[support_foot_link_name].transpose() << " " << support_ee_pos[support_foot_link_name].transpose() << std::endl;
-    dataCC3 << x_desired[swing_foot_link_name].transpose() << " " << support_ee_pos[swing_foot_link_name].transpose() << std::endl;
-
-    //--- Map Desired to base frame
-    for (const auto& name : task_names)
-    {
-        x_desired.at(name) = x_desired.at(name) - support_ee_pos[base_link_name];
-        dx_desired.at(name) = dx_desired.at(name);
-        ddx_desired.at(name) = ddx_desired.at(name);
-
-        R_desired.at(name) = R_desired.at(name);
-        w_desired.at(name) = w_desired.at(name);
-        dw_desired.at(name) = dw_desired.at(name);
-    }
-
-    x_desired[lhand_link_name]    = init_base_ee_pos[lhand_link_name];
-    x_desired[rhand_link_name]    = init_base_ee_pos[rhand_link_name];
-    R_desired.at(lhand_link_name) = init_base_ee_rot.at(lhand_link_name);
-    R_desired.at(rhand_link_name) = init_base_ee_rot.at(rhand_link_name);
-    R_desired.at(head_link_name)  = init_base_ee_rot.at(head_link_name);
-    R_desired.at(chest_link_name) = init_base_ee_rot.at(chest_link_name);
-
-    //--- Increment Tick
-    tick++;
-    step_tick++;
-    
-    static bool is_transfer_phase = true;
-    if(is_transfer_phase == true)
-    {
-        if(step_tick >= transition_duration * hz_)
-        {
-            if(contact_mode_ == ContactIndicator::DoubleSupport)
-            {
-                is_left_contact_transition = true;  
-            }
-            else
-            {
-                ROS_ERROR("Contact Indicator are assigned with something wrong value.");
-                assert(contact_mode_ == ContactIndicator::DoubleSupport);
-            }
-
-            step_tick = 0;
-            step_cnt++;
-
-            is_transfer_phase = false;
-        }
-    }
-    else
-    {
-        if ( step_tick == step_duration * hz_ - 1)    
-        {
-            if(contact_mode_ == ContactIndicator::RightSingleSupport)
-            {
-                is_left_contact_transition = true; 
-            }
-            else if(contact_mode_ == ContactIndicator::LeftSingleSupport)
-            {
-                is_right_contact_transition = true; 
-            }
-            else
-            {
-                ROS_ERROR("Contact Indicator are assigned with something wrong value.");
-                assert(contact_mode_ == ContactIndicator::DoubleSupport || contact_mode_ == ContactIndicator::LeftSingleSupport || contact_mode_ == ContactIndicator::RightSingleSupport);
-            }
-
-            step_tick = 0;
-            step_cnt++;
-        }
-    }
-
-}
-
-//--- Signed Distance Function
-double CustomController::getSignedDistanceFunction(LinkData &linkA_, LinkData &linkB_, Eigen::MatrixXd &J_AB)
-{   
-    // Initialization
-    double sd_AB = 0.0;
-
-    Eigen::Vector3d posA_transform_current_from_global_; posA_transform_current_from_global_.setZero();
-    Eigen::Vector3d posB_transform_current_from_global_; posB_transform_current_from_global_.setZero();
-
-    // Base Coordinate
-    Eigen::Vector3d base_pos = rd_.link_[link_index_map[base_link_name]].xpos; 
-    Eigen::Matrix3d base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[link_index_map[base_link_name]].rotm)(2)); 
-
-    posA_transform_current_from_global_ = base_rot.transpose() * (linkA_.xpos - base_pos);
-    posB_transform_current_from_global_ = base_rot.transpose() * (linkB_.xpos - base_pos);
-
-    sd_AB = (posA_transform_current_from_global_ - posB_transform_current_from_global_).norm(); 
-
-    Eigen::Vector3d normal_vector_btw_AB; normal_vector_btw_AB.setZero();
-    normal_vector_btw_AB = (posA_transform_current_from_global_ - posB_transform_current_from_global_) / (posA_transform_current_from_global_ - posB_transform_current_from_global_).norm();
-
-    J_AB.setZero(1, MODEL_DOF_VIRTUAL);
-    J_AB = normal_vector_btw_AB.transpose() * base_rot.transpose() * (linkA_.Jac().topRows(3) - linkB_.Jac().topRows(3));
-
-    return sd_AB;
-}
-
 
 //--- Joy Utils
 void CustomController::xBoxJoyCallback(const sensor_msgs::Joy::ConstPtr& joy)
