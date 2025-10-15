@@ -109,14 +109,40 @@ void DynWBC::computeDynamicWBC()
 void DynWBC::calcDesiredJointAcceleration()
 {
     rd_.q_ddot_desired_virtual.setZero();
-    rd_.q_ddot_desired_virtual = rd_.Kp_virtual_diag * (rd_.q_desired_virtual - rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL)) + rd_.Kd_virtual_diag * (rd_.q_dot_desired_virtual - rd_.local_q_dot_virtual_);
+    // rd_.q_ddot_desired_virtual = rd_.Kp_virtual_diag * (rd_.q_desired_virtual - rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL)) + rd_.Kd_virtual_diag * (rd_.q_dot_desired_virtual - rd_.local_q_dot_virtual_);
+    rd_.q_ddot_desired_virtual = rd_.Kd_virtual_diag * (rd_.q_dot_desired_virtual - rd_.local_q_dot_virtual_);
 }
 
 void DynWBC::computeTotalTorqueCommand()
 {
     Eigen::VectorQd torque_inv_dyn = (rd_.local_A * qddot_qp + rd_.local_G - rd_.local_J_C.transpose() * contact_wrench_qp).tail(MODEL_DOF);
-    Eigen::VectorQd torque_pd      = rd_.Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
+    Eigen::VectorQd torque_pd      = (rd_.Kp_diag / 9.0) * (rd_.q_desired - rd_.q_) + (rd_.Kd_diag / 3.0) * (rd_.q_dot_desired - rd_.q_dot_);
     Eigen::VectorQd torque_sum     = torque_inv_dyn + torque_pd;
+
+    // --- Torque initialization
+    static bool is_torque_save_init = true;
+    if(is_torque_save_init == true)
+    {
+        rd_.torque_init = rd_.torque_desired;
+
+        is_torque_save_init = false;
+    }
+
+    static bool is_torque_desired_init = true;
+    static int tick_torque_desired_init = 0;
+    if(is_torque_desired_init == true)
+    {
+        for (int i = 0; i < MODEL_DOF; i++) {
+            torque_sum(i) = DyrosMath::cubic(tick_torque_desired_init, 0, 1000, rd_.torque_init(i), torque_sum(i), 0.0, 0.0);
+        }
+
+        tick_torque_desired_init++;
+
+        if(tick_torque_desired_init >= 1000) {
+            is_torque_desired_init = false;
+            std::cout << "##### INFO: INITIAL TORQUE SMOOTHING COMPLETE #####" << std::endl;
+        }
+    }
 
     rd_.torque_desired = torque_sum;
 }
@@ -159,7 +185,7 @@ void DynWBC::calcEqualityConstraint()
     Eigen::VectorXd ubA_cc; ubA_cc.setZero(contact_dim);
 
     A_cc.rightCols(MODEL_DOF_VIRTUAL) = base_contact_Jac;
-    const double K_contact = 100.0;
+    const double K_contact = 20.0;
     bool local_LF_contact = rd_.ee_[0].contact;
     bool local_RF_contact = rd_.ee_[1].contact;
     for (int i = 0; i < rd_.contact_index; i++)

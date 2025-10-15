@@ -78,7 +78,7 @@ private:
 
     double W_cwr = 1e-5;
     double W_qddot = 1.0;
-    double W_energy = 0.5;
+    double W_energy = 1.0;
 
     int contact_dim = 12;
     int contact_dim_prev = 12;

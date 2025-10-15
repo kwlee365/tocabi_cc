@@ -51,7 +51,7 @@ void CustomController::computeSlow()
     {
         cm_.update();
 
-        tm_.runTestMotion(motion_mode_, 3.0, 0.12, 0.2, 0.08, 0.6); 
+        tm_.runTestMotion(motion_mode_, 3.0, 0.15, 0.2, 0.08, 0.6); 
 
         kin_wbc_.computeTaskSpaceKinematicWBC();
 
@@ -134,7 +134,7 @@ void CustomController::loadParams()
     for (int i = 0; i < MODEL_DOF_VIRTUAL; ++i)
     {
         Kp_virtual(i) = kp_dyn_vec[i];
-        Kd_virtual(i) = kd_dyn_vec[i];
+        Kd_virtual(i) = kd_dyn_vec[i] * 1.5;
     }
 
     rd_.Kp_virtual_diag = Kp_virtual.asDiagonal();

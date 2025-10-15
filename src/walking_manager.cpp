@@ -117,9 +117,7 @@ void WalkingManager::getFootTrajectory(const double &foot_height)
     int support_foot_link_idx, support_hip_link_idx, swing_foot_link_idx, swing_hip_link_idx;
 
     support_foot_link_idx = local_LF_contact ? Left_Foot  : Right_Foot;
-    support_hip_link_idx  = local_LF_contact ? Left_Hip   : Right_Hip;
     swing_foot_link_idx   = local_LF_contact ? Right_Foot : Left_Foot;
-    swing_hip_link_idx    = local_LF_contact ? Right_Hip  : Left_Hip;
 
     //--- Desired Hip Pos
     footstep_des.setZero();
@@ -168,7 +166,7 @@ void WalkingManager::getPelvTrajectory()
     }
     else
     {
-        rd_.link_[Pelvis].x_desired(0) = footstep_des(0) / 2.0 - 0.1;
+        rd_.link_[Pelvis].x_desired(0) = footstep_des(0) / 2.0 - 0.05;
         rd_.link_[Pelvis].x_desired(1) = footstep_des(1) / 2.0;
     }
     rd_.link_[Pelvis].x_desired(2) = 0.765;
