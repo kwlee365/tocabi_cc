@@ -12,15 +12,12 @@ public:
     KinWBC(RobotData& rd);
 
     void computeTaskSpaceKinematicWBC();
-    void setControlFrequency(double &hz);
 
 private:
     RobotData &rd_;
     std::vector<std::vector<TaskInfo>> task_hierarchy;
 
-    double hz_ = 2000.0;
-
-    bool is_cannot_solve_qp_init_ = true;
+    bool is_cannot_solve_qp_ = true;
 
     Eigen::VectorVQd safetyFilter();
     CQuadraticProgram QP_safety_filter;

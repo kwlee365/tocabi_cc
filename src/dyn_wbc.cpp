@@ -75,7 +75,7 @@ void DynWBC::computeDynamicWBC()
     else
     {
         //--- CONSTRAINTS VIOLATION CHECKER
-        if(is_cannot_solve_qp_init_ == true)   
+        if(is_cannot_solve_qp_ == true)   
         {
             Eigen::VectorXd Ax = A_const * X_; 
 
@@ -96,7 +96,7 @@ void DynWBC::computeDynamicWBC()
                     std::cerr << "[Constraint Violation] Row " << i << ": " << val << " > ubA = " << u << std::endl;
                 }
             }
-            is_cannot_solve_qp_init_ = false;
+            is_cannot_solve_qp_ = false;
         }
 
         std::cout << "Dyn WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
@@ -109,14 +109,13 @@ void DynWBC::computeDynamicWBC()
 void DynWBC::calcDesiredJointAcceleration()
 {
     rd_.q_ddot_desired_virtual.setZero();
-    // rd_.q_ddot_desired_virtual = rd_.Kp_virtual_diag * (rd_.q_desired_virtual - rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL)) + rd_.Kd_virtual_diag * (rd_.q_dot_desired_virtual - rd_.local_q_dot_virtual_);
-    rd_.q_ddot_desired_virtual = rd_.Kd_virtual_diag * (rd_.q_dot_desired_virtual - rd_.local_q_dot_virtual_);
+    rd_.q_ddot_desired_virtual = rd_.Kp_virtual_diag * (rd_.q_desired_virtual - rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL)) + rd_.Kd_virtual_diag * (rd_.q_dot_desired_virtual - rd_.local_q_dot_virtual_);
 }
 
 void DynWBC::computeTotalTorqueCommand()
 {
     Eigen::VectorQd torque_inv_dyn = (rd_.local_A * qddot_qp + rd_.local_G - rd_.local_J_C.transpose() * contact_wrench_qp).tail(MODEL_DOF);
-    Eigen::VectorQd torque_pd      = (rd_.Kp_diag / 9.0) * (rd_.q_desired - rd_.q_) + (rd_.Kd_diag / 3.0) * (rd_.q_dot_desired - rd_.q_dot_);
+    Eigen::VectorQd torque_pd      = rd_.Kp_diag * (rd_.q_desired - rd_.q_) + rd_.Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
     Eigen::VectorQd torque_sum     = torque_inv_dyn + torque_pd;
 
     // --- Torque initialization
@@ -140,7 +139,7 @@ void DynWBC::computeTotalTorqueCommand()
 
         if(tick_torque_desired_init >= 1000) {
             is_torque_desired_init = false;
-            std::cout << "##### INFO: INITIAL TORQUE SMOOTHING COMPLETE #####" << std::endl;
+            std::cout << "========== INFO: INITIAL TORQUE SMOOTHING COMPLETE ==========" << std::endl;
         }
     }
 
@@ -169,9 +168,9 @@ void DynWBC::calcCostGrad()
 void DynWBC::calcEqualityConstraint()
 {
     //--- (1) Floating base dynamics
-    Eigen::MatrixXd A_fl; A_fl.setZero(base_dim, contact_dim + MODEL_DOF_VIRTUAL);
-    Eigen::VectorXd lbA_fl; lbA_fl.setZero(base_dim);
-    Eigen::VectorXd ubA_fl; ubA_fl.setZero(base_dim);
+    Eigen::MatrixXd A_fl; A_fl.setZero(6, contact_dim + MODEL_DOF_VIRTUAL);
+    Eigen::VectorXd lbA_fl; lbA_fl.setZero(6);
+    Eigen::VectorXd ubA_fl; ubA_fl.setZero(6);
 
     A_fl.leftCols(contact_dim) = Sf * base_contact_Jac_T;
     A_fl.rightCols(MODEL_DOF_VIRTUAL) = -Sf * M;
@@ -266,14 +265,6 @@ void DynWBC::checkGradHessSize()
 ///////////////////////////////////////////
 //--- Quadratic Programming Variables ---//
 ///////////////////////////////////////////
-void DynWBC::setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_)
-{
-    //--- Friction, Contact, Torque limit constraints
-    mu = mu_;
-    foot_size = foot_size_; 
-    foot_width = foot_width_; 
-}
-
 void DynWBC::updateContactState()
 {
     contact_dim_prev = contact_dim;
@@ -298,7 +289,7 @@ void DynWBC::updateRobotStates()
 
     Sa_T.setZero(MODEL_DOF_VIRTUAL, MODEL_DOF); Sa_T.bottomRows(MODEL_DOF).setIdentity();
     Sa.setZero(MODEL_DOF, MODEL_DOF_VIRTUAL);   Sa = Sa_T.transpose();
-    Sf.setZero(base_dim, MODEL_DOF_VIRTUAL);    Sf.leftCols(base_dim).setIdentity();
+    Sf.setZero(6, MODEL_DOF_VIRTUAL);    Sf.leftCols(6).setIdentity();
 
     //--- Friction cone constraints (https://scaron.info/robotics/wrench-friction-cones.html)
     Eigen::MatrixXd U_fric_dsp; U_fric_dsp.setZero(34, 12);
@@ -344,4 +335,17 @@ void DynWBC::updateRobotStates()
 
         A_fric.leftCols(contact_dim) = U_fric_ssp;
     }
+}
+
+//--- Setter
+void DynWBC::setFrictionCoefficient(const double& mu_)
+{
+    //--- Friction, Contact, Torque limit constraints
+    mu = mu_;
+}
+
+void DynWBC::setFootDimension(const double& foot_size_, const double& foot_width_)
+{
+    foot_size = foot_size_; 
+    foot_width = foot_width_; 
 }

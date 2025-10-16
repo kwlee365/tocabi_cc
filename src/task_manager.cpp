@@ -4,30 +4,26 @@ using namespace TOCABI;
 
 TaskManager::TaskManager(RobotData& rd) : rd_(rd)
 {
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         rd_.link_[idx].x_desired.setZero();
         rd_.link_[idx].rot_desired.setIdentity();
     }
 }
 
-void TaskManager::setControlFrequency(double &hz)
-{
-    hz_ = hz;
-}
 
-void TaskManager::runTestMotion(const TaskMotionType& motion_mode, const double &traj_time, const double &pelv_dist, const double &hand_dist, const double &foot_height, const double &step_duration)
+void TaskManager::runTestMotion(const TaskMotionType& motion_mode)
 {
     switch (motion_mode)
     {
         case TaskMotionType::PelvHand:
-            movePelvHandPose(traj_time, pelv_dist, hand_dist);
+            movePelvHandPose();
             break;
         case TaskMotionType::Taichi:
-            moveTaichiMotion(traj_time, pelv_dist, hand_dist, foot_height);
+            moveTaichiMotion();
             break;
         case TaskMotionType::Walking:
-            bipedalWalkingController(step_duration, foot_height);
+            bipedalWalkingController();
             break;
         case TaskMotionType::None:
             break;
@@ -36,20 +32,20 @@ void TaskManager::runTestMotion(const TaskMotionType& motion_mode, const double 
     }
 }
 
-void TaskManager::movePelvHandPose(const double &traj_time, const double &pelv_dist, const double &hand_dist)
+void TaskManager::movePelvHandPose()
 {
     //--- Initialization
     static int sim_tick = 0;
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         rd_.link_[idx].x_desired = rd_.link_[idx].local_xpos_init;
         rd_.link_[idx].r_traj.setIdentity();
     }
 
     //--- Pelvis Trajectory
-    rd_.link_[Pelvis].x_desired = rd_.link_[Pelvis].support_xpos_init;
-    rd_.link_[Pelvis].x_desired(1) = rd_.link_[Pelvis].support_xpos_init(1) + pelv_dist;
-    rd_.link_[Pelvis].x_desired  = rd_.link_[Pelvis].x_desired - rd_.link_[Pelvis].support_xpos;
+    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].support_xpos_init;
+    rd_.link_[COM_id].x_desired(1) = rd_.link_[COM_id].support_xpos_init(1) + pelv_dist;
+    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].x_desired - rd_.link_[Pelvis].support_xpos;
 
     //--- Both Hand Trajectories
     for (int idx = 1; idx < 3; idx++)
@@ -59,7 +55,7 @@ void TaskManager::movePelvHandPose(const double &traj_time, const double &pelv_d
     }
 
     //--- Trajectory Generation
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         rd_.link_[idx].SetTrajectoryQuintic(sim_tick, 0, traj_time * hz_, rd_.link_[idx].local_xpos_init, rd_.link_[idx].x_desired);
     }
@@ -68,25 +64,25 @@ void TaskManager::movePelvHandPose(const double &traj_time, const double &pelv_d
     sim_tick++;
 }
 
-void TaskManager::moveTaichiMotion(const double &traj_time, const double &pelv_dist, const double &hand_dist, const double &foot_height)
+void TaskManager::moveTaichiMotion()
 {
     //--- Initialization
     static int sim_tick = 0;
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         rd_.link_[idx].x_desired = rd_.link_[idx].local_xpos_init;
         rd_.link_[idx].r_traj.setIdentity();
     }
 
     //--- Pelvis Trajectory
-    rd_.link_[Pelvis].x_desired = rd_.link_[Pelvis].support_xpos_init;
-    rd_.link_[Pelvis].x_desired(1) = rd_.link_[Pelvis].support_xpos_init(1) + pelv_dist;
-    rd_.link_[Pelvis].x_desired  = rd_.link_[Pelvis].x_desired - rd_.link_[Pelvis].support_xpos;
+    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].support_xpos_init;
+    rd_.link_[COM_id].x_desired(1) = rd_.link_[COM_id].support_xpos_init(1) + pelv_dist;
+    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].x_desired - rd_.link_[Pelvis].support_xpos;
 
     //--- Hand Trajectory
     for (int idx = 1; idx < 3; idx++)
     {
-        rd_.link_[Left_Hand].x_desired(idx) = rd_.link_[Left_Hand].local_xpos_init(idx) + hand_dist;
+        rd_.link_[Left_Hand].x_desired(idx)  = rd_.link_[Left_Hand].local_xpos_init(idx) + hand_dist;
         rd_.link_[Right_Hand].x_desired(idx) = rd_.link_[Right_Hand].local_xpos_init(idx) - hand_dist;
     }
 
@@ -94,7 +90,7 @@ void TaskManager::moveTaichiMotion(const double &traj_time, const double &pelv_d
     rd_.link_[Right_Foot].x_desired(2) = rd_.link_[Right_Foot].local_xpos_init(2) + foot_height;
 
     //--- Trajectory Generation
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         rd_.link_[idx].SetTrajectoryQuintic(sim_tick, 0, traj_time * hz_, rd_.link_[idx].local_xpos_init, rd_.link_[idx].x_desired);
     }
@@ -124,24 +120,54 @@ void TaskManager::moveTaichiMotion(const double &traj_time, const double &pelv_d
     }
 }
 
-void TaskManager::bipedalWalkingController(const double &step_duration_, const double &foot_height_)
+void TaskManager::bipedalWalkingController()
 {
     static WalkingManager wm_(rd_); 
-    
-    //--- Tick Counter
-    static int step_tick = 0;   // tick for one step
-    static int step_cnt  = 0;   // step count
-    const double step_duration = step_duration_;
-    const double transition_duration = 2.0;
 
-    bool local_LF_contact = rd_.ee_[0].contact;
-    bool local_RF_contact = rd_.ee_[1].contact;
-    double trajectory_duration =  (local_LF_contact == true && local_RF_contact == true) ? transition_duration : step_duration;
+    static bool is_wm_init = true;
+    if(is_wm_init == true)
+    {
+        wm_.setControlFrequency(hz_);
+        wm_.setCenterOfMassHeight(rd_.link_[COM_id].support_xpos_init(2));
+        wm_.setTransferDuration(2.0);
 
-    wm_.updateSupportInitialState();
-    wm_.updateContactState(local_LF_contact, local_RF_contact);
-    wm_.getTimeInformation(step_tick, static_cast<int>(trajectory_duration * hz_));
-    wm_.computeWalkingMotion(step_cnt, 0.0, 0.0, 0.0, foot_height_);
-    step_tick = wm_.updateStepTick(step_cnt);
-    std::cout << "step Tick: " << step_tick << " / " << trajectory_duration * hz_ << " , step Cnt: " << step_cnt << std::endl;
+        is_wm_init = false;
+    } 
+
+    wm_.updateContactState(rd_.ee_[0].contact, rd_.ee_[1].contact);
+    wm_.setWalkingParameter(0.0, 0.0, foot_height);
+    wm_.setStepDuration(step_duration);
+
+    wm_.computeWalkingMotion();
+}
+
+//--- Class Setter
+void TaskManager::setControlFrequency(double &hz)
+{
+    hz_ = hz;
+}
+
+void TaskManager::setTrajectoryDuration(double &traj_time_)
+{
+    traj_time = traj_time_;
+}
+
+void TaskManager::setPelvisDistance(double &pelv_dist_)
+{
+    pelv_dist = pelv_dist_;
+}
+
+void TaskManager::setHandDistance(double &hand_dist_)
+{
+    hand_dist = hand_dist_;
+}
+
+void TaskManager::setFootHeight(double &foot_height_)
+{
+    foot_height = foot_height_;
+}
+
+void TaskManager::setStepDuration(double &step_duration_)
+{
+    step_duration = step_duration_;
 }

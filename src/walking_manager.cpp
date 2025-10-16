@@ -3,14 +3,194 @@
 ofstream dataWM1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWM1.txt");
 ofstream dataWM2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWM2.txt");
 ofstream dataWM3("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWM3.txt");
+ofstream dataWM4("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWM4.txt");
+ofstream dataWM5("/home/kwan/catkin_ws/src/tocabi_cc/data/dataWM5.txt");
 
 WalkingManager::WalkingManager(RobotData &rd) : rd_(rd)
 {
+
 }
 
+void WalkingManager::computeWalkingMotion()
+{
+    updateSupportInitialState();
+
+    step_length    = (step_cnt == 0) ? (step_length * 0.5) : step_length;
+    step_width     = 0.21;
+    foot_yaw_angle = foot_yaw_angle;
+
+    step_command.setZero();
+    step_command << step_length, step_width;
+    step_command = rotZaxis2d(foot_yaw_angle) * step_command;
+
+    step_length = step_command(0);
+    step_width  = step_command(1);
+
+    calcFootstepQueue();
+    calcCapturePointQueue();
+    getFootTrajectory();
+    getComTrajectory();
+
+    updateStepTick();
+}
+
+void WalkingManager::calcFootstepQueue()
+{
+    int foot_contact_idx = local_LF_contact ? -1 : +1;
+
+    static bool is_footstep_queue_init = true;
+    if (is_footstep_queue_init == true)
+    {
+        step_queue.clear();
+
+        Eigen::Vector2d step_command_local; step_command_local.setZero();
+        for (int i = 0; i < preview_idx; i++)
+        {
+            step_command_local += Eigen::Vector2d(step_length, foot_contact_idx * step_width);
+            step_queue.push_back(step_command_local);
+
+            foot_contact_idx *= -1;
+        }
+
+        is_footstep_queue_init = false;
+    }
+
+    if(is_footstep_update == true)
+    {
+        Eigen::Vector2d step_command_first = step_queue.front();
+
+        for (auto iter = step_queue.begin(); iter != step_queue.end(); iter++)
+        {
+            *iter -= step_command_first;
+        }
+
+        step_queue.pop_front();
+
+        Eigen::Vector2d step_command_back = step_queue.back();
+        Eigen::Vector2d step_command_new = step_command_back + Eigen::Vector2d(step_length, foot_contact_idx * step_width);
+
+        step_queue.push_back(step_command_new);
+
+        is_footstep_update = false;
+    }
+}
+
+void WalkingManager::calcCapturePointQueue()
+{
+    static bool is_cp_queue_init = true;
+    if (is_cp_queue_init == true)
+    {
+        cp_end_queue.clear();
+
+        for (int i = 0; i < preview_idx; i++)
+        {
+            cp_end_queue.push_back(Eigen::Vector2d(0.0, 0.0));
+        }
+
+        is_cp_queue_init = false;
+    }
+
+    if(is_cp_eos_update == true)
+    {
+        cp_end_queue.back() = step_queue.back();
+
+        for (int i = preview_idx - 1; i > 0; --i)
+        {
+            Eigen::Vector2d cp_end = cp_end_queue[i];
+            Eigen::Vector2d zmp = step_queue[i-1];
+
+            cp_end_queue[i-1] = zmp + exp(-wn * trajectory_duration) * (cp_end - zmp);
+        }
+
+        is_cp_eos_update = false;
+    }
+}
+
+void WalkingManager::getFootTrajectory()
+{
+    int support_foot_link_idx, support_hip_link_idx, swing_foot_link_idx, swing_hip_link_idx;
+
+    support_foot_link_idx = local_LF_contact ? Left_Foot  : Right_Foot;
+    swing_foot_link_idx   = local_LF_contact ? Right_Foot : Left_Foot;
+
+    //--- Swing & Support Feet Trajectory
+    footstep_des.setZero(); 
+    // footstep_des = step_queue.front();
+    if (local_LF_contact == true && local_RF_contact == true) // DSP
+    {
+        rd_.link_[Left_Foot].x_traj = rd_.link_[Left_Foot].support_xpos_init;
+        rd_.link_[Right_Foot].x_traj = rd_.link_[Right_Foot].support_xpos_init;
+
+        rd_.link_[Left_Foot].r_traj.setIdentity();
+        rd_.link_[Right_Foot].r_traj.setIdentity();
+    }
+    else // SSP
+    {
+        footstep_des << rd_.link_[swing_foot_link_idx].support_xpos_init(0),
+                        rd_.link_[swing_foot_link_idx].support_xpos_init(1);
+
+        rd_.link_[support_foot_link_idx].x_traj = rd_.link_[support_foot_link_idx].support_xpos_init;
+
+        rd_.link_[swing_foot_link_idx].x_traj(0) = cubicBezierPolynomial(step_time, 0.0, trajectory_duration, rd_.link_[swing_foot_link_idx].support_xpos_init(0), (rd_.link_[swing_foot_link_idx].support_xpos_init(0) + footstep_des(0)) / 2.0, footstep_des(0));
+        rd_.link_[swing_foot_link_idx].x_traj(1) = cubicBezierPolynomial(step_time, 0.0, trajectory_duration, rd_.link_[swing_foot_link_idx].support_xpos_init(1), (rd_.link_[swing_foot_link_idx].support_xpos_init(1) + footstep_des(1)) / 2.0, footstep_des(1));
+        rd_.link_[swing_foot_link_idx].x_traj(2) = cubicBezierPolynomial(step_time, 0.0, trajectory_duration, rd_.link_[swing_foot_link_idx].support_xpos_init(2), foot_height, rd_.link_[swing_foot_link_idx].support_xpos_init(2));
+
+        rd_.link_[Left_Foot].r_traj.setIdentity();
+        rd_.link_[Right_Foot].r_traj.setIdentity();
+    }
+
+    dataWM1 << std::setprecision(3)
+            << rd_.link_[Left_Foot].x_traj(0) << "," << rd_.link_[Left_Foot].x_traj(1) << "," << rd_.link_[Left_Foot].x_traj(2) << ","
+            << rd_.link_[Left_Foot].support_xpos(0) << "," << rd_.link_[Left_Foot].support_xpos(1) << "," << rd_.link_[Left_Foot].support_xpos(2)
+            << std::endl;
+
+    dataWM2 << std::setprecision(3)
+            << rd_.link_[Right_Foot].x_traj(0) << "," << rd_.link_[Right_Foot].x_traj(1) << "," << rd_.link_[Right_Foot].x_traj(2) << ","
+            << rd_.link_[Right_Foot].support_xpos(0) << "," << rd_.link_[Right_Foot].support_xpos(1) << "," << rd_.link_[Right_Foot].support_xpos(2)
+            << std::endl;
+    rd_.link_[Left_Foot].x_traj  = rd_.link_[Left_Foot].x_traj - rd_.link_[Pelvis].support_xpos;
+    rd_.link_[Right_Foot].x_traj = rd_.link_[Right_Foot].x_traj - rd_.link_[Pelvis].support_xpos;
+}
+
+void WalkingManager::getComTrajectory()
+{
+    cp_desired.setZero();
+    cp_desired = exp(wn * (trajectory_duration - step_time)) * cp_end_queue.front();
+
+
+    //--- Base Test
+    if (local_LF_contact == true && local_RF_contact == true) // DSP
+    {
+        rd_.link_[COM_id].x_desired    =  rd_.link_[COM_id].support_xpos_init;
+        rd_.link_[COM_id].x_desired(1) =  rd_.link_[COM_id].support_xpos_init(1) + 0.02;
+    }
+    else
+    {
+        rd_.link_[COM_id].x_desired(0) = footstep_des(0) / 2.0;
+        rd_.link_[COM_id].x_desired(1) = footstep_des(1) / 2.0;
+    }
+    rd_.link_[COM_id].x_desired(2) = 0.73;
+
+    rd_.link_[COM_id].SetTrajectoryQuintic(step_time, 0.0, trajectory_duration, rd_.link_[COM_id].support_xpos_init, rd_.link_[COM_id].x_desired);
+    dataWM3 << std::setprecision(3)
+            << rd_.link_[COM_id].x_traj(0) << "," << rd_.link_[COM_id].x_traj(1) << "," << rd_.link_[COM_id].x_traj(2) << ","
+            << rd_.link_[COM_id].support_xpos(0) << "," << rd_.link_[COM_id].support_xpos(1) << "," << rd_.link_[COM_id].support_xpos(2)
+            << std::endl;
+
+    dataWM4 << std::setprecision(3)
+            << cp_desired(0) << "," << cp_desired(1) << ","
+            << (rd_.link_[COM_id].support_xpos(0) + rd_.link_[COM_id].support_v(0) / wn) << ","
+            << (rd_.link_[COM_id].support_xpos(1) + rd_.link_[COM_id].support_v(1) / wn)
+            << std::endl;
+
+
+    rd_.link_[COM_id].x_traj = rd_.link_[COM_id].x_traj - rd_.link_[Pelvis].support_xpos;
+}
+
+//--- State Initialization
 void WalkingManager::updateSupportInitialState()
 {
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         rd_.link_[idx].x_traj = rd_.link_[idx].local_xpos_init;
         rd_.link_[idx].r_traj = rd_.link_[idx].local_rotm_init;
@@ -18,7 +198,7 @@ void WalkingManager::updateSupportInitialState()
 
     if (is_support_transition == true)
     {
-        for (int idx = 0; idx < LINK_NUMBER; idx++)
+        for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
         {
             //--- Support frame
             rd_.link_[idx].support_xpos_init = rd_.link_[idx].support_xpos;
@@ -33,33 +213,25 @@ void WalkingManager::updateSupportInitialState()
     {
         // Do nothing
     }
+
 }
 
-void WalkingManager::updateContactState(const bool &local_LF_contact_, const bool &local_RF_contact_)
-{
-    local_LF_contact = local_LF_contact_;
-    local_RF_contact = local_RF_contact_;
-}
-
-void WalkingManager::getTimeInformation(const int &step_tick_, const int &trajectory_duration_)
-{
-    step_tick = step_tick_;
-    trajectory_duration = trajectory_duration_;
-}
-
-int WalkingManager::updateStepTick(int &step_cnt)
+//--- Tick Update
+void WalkingManager::updateStepTick()
 {
     step_tick++;
 
     static bool is_transfer_phase = true;
     if (is_transfer_phase == true)
     {
-        if (step_tick >= trajectory_duration)
+        if (step_tick >= static_cast<int>(trajectory_duration * hz_))
         {
             if (local_LF_contact == true && local_RF_contact == true)
             {
                 rd_.is_left_contact_transition = true;
                 is_support_transition = true;
+                is_footstep_update = true;
+                is_cp_eos_update = true;
             }
             else
             {
@@ -75,17 +247,21 @@ int WalkingManager::updateStepTick(int &step_cnt)
     }
     else
     {
-        if (step_tick >= trajectory_duration - 1)
+        if (step_tick >= static_cast<int>(trajectory_duration * hz_) - 1)
         {
             if (local_LF_contact != true && local_RF_contact == true)
             {
                 rd_.is_left_contact_transition = true;
                 is_support_transition = true;
+                is_footstep_update = true;
+                is_cp_eos_update = true;
             }
             else if (local_LF_contact == true && local_RF_contact != true)
             {
                 rd_.is_right_contact_transition = true;
                 is_support_transition = true;
+                is_footstep_update = true;
+                is_cp_eos_update = true;
             }
             else
             {
@@ -96,81 +272,46 @@ int WalkingManager::updateStepTick(int &step_cnt)
             step_cnt++;
         }
     }
-
-    return (step_tick);
 }
 
-void WalkingManager::computeWalkingMotion(const int &step_cnt, const double &step_length_x_, const double &step_length_y_, const double &step_length_yaw_, const double &foot_height)
+
+//--- Class Setter
+void WalkingManager::setControlFrequency(const double &hz)
 {
-    const int preview_idx = 3;
-
-    step_length_x = (step_cnt == 0) ? (step_length_x_ * 0.5) : step_length_x_;
-    step_length_y = step_length_y_;
-    step_length_y = step_length_yaw_;
-
-    getFootTrajectory(foot_height);
-    getPelvTrajectory();
+    hz_ = hz;
 }
 
-void WalkingManager::getFootTrajectory(const double &foot_height)
+void WalkingManager::setCenterOfMassHeight(const double &com_height_)
 {
-    int support_foot_link_idx, support_hip_link_idx, swing_foot_link_idx, swing_hip_link_idx;
-
-    support_foot_link_idx = local_LF_contact ? Left_Foot  : Right_Foot;
-    swing_foot_link_idx   = local_LF_contact ? Right_Foot : Left_Foot;
-
-    //--- Desired Hip Pos
-    footstep_des.setZero();
-
-    //--- Swing & Support Feet Trajectory
-    if (local_LF_contact == true && local_RF_contact == true) // DSP
-    {
-        footstep_des = rd_.link_[Pelvis].support_xpos_init.head(2);
-        footstep_des(1) += 0.02;
-
-        rd_.link_[Left_Foot].x_traj = rd_.link_[Left_Foot].support_xpos_init;
-        rd_.link_[Right_Foot].x_traj = rd_.link_[Right_Foot].support_xpos_init;
-
-        rd_.link_[Left_Foot].r_traj.setIdentity();
-        rd_.link_[Right_Foot].r_traj.setIdentity();
-    }
-    else // SSP
-    {
-        footstep_des << rd_.link_[swing_foot_link_idx].support_xpos_init(0) + step_length_x,
-                        rd_.link_[swing_foot_link_idx].support_xpos_init(1) + step_length_y;
-
-        rd_.link_[support_foot_link_idx].x_traj = rd_.link_[support_foot_link_idx].support_xpos_init;
-
-        rd_.link_[swing_foot_link_idx].x_traj(0) = cubicBezierPolynomial(step_tick, 0.0, trajectory_duration, rd_.link_[swing_foot_link_idx].support_xpos_init(0), (rd_.link_[swing_foot_link_idx].support_xpos_init(0) + footstep_des(0)) / 2.0, footstep_des(0));
-        rd_.link_[swing_foot_link_idx].x_traj(1) = cubicBezierPolynomial(step_tick, 0.0, trajectory_duration, rd_.link_[swing_foot_link_idx].support_xpos_init(1), (rd_.link_[swing_foot_link_idx].support_xpos_init(1) + footstep_des(1)) / 2.0, footstep_des(1));
-        rd_.link_[swing_foot_link_idx].x_traj(2) = cubicBezierPolynomial(step_tick, 0.0, trajectory_duration, rd_.link_[swing_foot_link_idx].support_xpos_init(2), foot_height, rd_.link_[swing_foot_link_idx].support_xpos_init(2));
-
-        rd_.link_[Left_Foot].r_traj.setIdentity();
-        rd_.link_[Right_Foot].r_traj.setIdentity();
-    }
-
-    dataWM1 << rd_.link_[Left_Foot].x_traj.transpose() << " " << rd_.link_[Left_Foot].support_xpos.transpose() << std::endl;
-    dataWM2 << rd_.link_[Right_Foot].x_traj.transpose() << " " << rd_.link_[Right_Foot].support_xpos.transpose() << std::endl;
-
-    rd_.link_[Left_Foot].x_traj = rd_.link_[Left_Foot].x_traj - rd_.link_[Pelvis].support_xpos;
-    rd_.link_[Right_Foot].x_traj = rd_.link_[Right_Foot].x_traj - rd_.link_[Pelvis].support_xpos;
+    com_height = com_height_;
+    wn = sqrt(GRAVITY / com_height);
 }
 
-void WalkingManager::getPelvTrajectory()
+void WalkingManager::setTransferDuration(const double& transfer_duration_)
 {
-    //--- Base Test
-    if (local_LF_contact == true && local_RF_contact == true) // DSP
-    {
-        rd_.link_[Pelvis].x_desired(0) = footstep_des(0);
-        rd_.link_[Pelvis].x_desired(1) = footstep_des(1);
-    }
-    else
-    {
-        rd_.link_[Pelvis].x_desired(0) = footstep_des(0) / 2.0 - 0.05;
-        rd_.link_[Pelvis].x_desired(1) = footstep_des(1) / 2.0;
-    }
-    rd_.link_[Pelvis].x_desired(2) = 0.765;
+    transfer_duration = transfer_duration_;
+}
 
-    rd_.link_[Pelvis].SetTrajectoryQuintic(step_tick, 0.0, trajectory_duration, rd_.link_[Pelvis].support_xpos_init, rd_.link_[Pelvis].x_desired);
-    rd_.link_[Pelvis].x_traj = rd_.link_[Pelvis].x_traj - rd_.link_[Pelvis].support_xpos;
+void WalkingManager::updateContactState(const bool &local_LF_contact_, const bool &local_RF_contact_)
+{
+    local_LF_contact = local_LF_contact_;
+    local_RF_contact = local_RF_contact_;
+}
+
+void WalkingManager::setWalkingParameter(const double &step_length_, const double &foot_yaw_angle_, const double &foot_height_)
+{
+    step_length = step_length_;
+    foot_yaw_angle = foot_yaw_angle_;
+    foot_height = foot_height_;
+}
+
+void WalkingManager::setStepDuration(const double& step_duration_)
+{
+    step_duration = step_duration_;
+
+    trajectory_duration =  (local_LF_contact == true && local_RF_contact == true) ? transfer_duration : step_duration;
+
+    step_time = static_cast<double>(step_tick) / hz_;
+
+    dataWM5  << step_time << "," << trajectory_duration << std::endl;
 }

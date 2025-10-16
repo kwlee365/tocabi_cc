@@ -76,6 +76,14 @@ Eigen::Vector3d vee(const Eigen::Matrix3d& M)
     return v;
 }
 
+Eigen::Matrix2d rotZaxis2d(double theta)
+{
+    Eigen::Matrix2d R;
+    R << cos(theta), -sin(theta),
+         sin(theta),  cos(theta);
+    return R;
+}
+
 double cubicBezierPolynomial(double current_time, double start_time, double end_time, double p_init, double p_mid, double p_end)
 {
     double x_t;
@@ -96,7 +104,7 @@ double cubicBezierPolynomial(double current_time, double start_time, double end_
     else
     {
         double elapsed_time = current_time - start_time;
-        double total_time   = end_time     - start_time - 1;
+        double total_time   = end_time     - start_time;
 
         double t = elapsed_time / total_time;
 
@@ -131,7 +139,7 @@ double cubicDotBezierPolynomial(double current_time, double start_time, double e
     else
     {
         double elapsed_time = current_time - start_time;
-        double total_time   = end_time     - start_time - 1;
+        double total_time   = end_time     - start_time;
 
         double t = elapsed_time / total_time;
 

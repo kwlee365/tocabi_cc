@@ -24,6 +24,8 @@ data = readmatrix('dataWM2.txt');
 right_foot_pos= data(:, 1:6);
 data = readmatrix('dataWM3.txt');
 pelv_pos = data(:, 1:6);
+data = readmatrix('dataWM4.txt');
+cp_pos = data(:, 1:4);
 figure()
 
 w = sqrt(9.81 / 0.73)
@@ -39,16 +41,17 @@ for cnt = 1:1:3
     plot(right_foot_pos(:, start_cnt + cnt + 3))
     plot(pelv_pos(:,start_cnt + cnt));
     plot(pelv_pos(:,start_cnt + cnt + 3));
-    legend()
+    % plot(cp_pos(:,start_cnt + cnt));
+    % plot(cp_pos(:,start_cnt + cnt + 2));
     legend('lfoot traj', 'lfoot cur', 'rfoot traj', 'rfoot cur', 'pelv traj', 'pelv cur');
 end
-%%
-clc
-clear all
-close all
 
-dataCC = readmatrix('dataWBC6.txt');
-dt = dataCC(:, 1);
+data = readmatrix('dataWM5.txt');
+t = data(:, 1);
+T = data(:, 2);
+
 
 figure()
-plot(dt(:,1))
+plot(t(:,1))
+hold on
+plot(T(:,1))

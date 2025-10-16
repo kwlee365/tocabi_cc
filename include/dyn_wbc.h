@@ -14,51 +14,50 @@ public:
     DynWBC(RobotData& rd);
 
     //--- QP WBC 
-    CQuadraticProgram QP_Dyn_Wbc;
 
     void computeDynamicWBC();
-    void calcDesiredJointAcceleration();
     void computeTotalTorqueCommand();
 
-    void calcCostGrad();
-    void calcCostHess();
-    void calcEqualityConstraint();
-    void calcInequalityConstraint();
-    void checkGradHessSize();
+    //--- Setter
+    void setFrictionCoefficient(const double& mu_);
+    void setFootDimension(const double& foot_size_, const double& foot_width_);
 
-    void setRobotSystemParameters(const double& mu_, const double& foot_size_, const double& foot_width_);
-    void updateContactState();
-    void updateRobotStates();
-
-    Eigen::MatrixXd Hess;  // HESSIAN
-    Eigen::VectorXd grad;  // GRADIENT
-    Eigen::MatrixXd A_const;    
-    Eigen::VectorXd lbA_const;  
-    Eigen::VectorXd ubA_const;  
-    std::vector<ConstraintMatrix> constraints_; // CONSTRAINTS
-    int total_num_state = 0;
-    int total_num_constraints = 0;
-
-    Eigen::Vector6d base_impedance_cmd;
-    Eigen::VectorXd contact_wrench_cmd;
-    Eigen::Vector6d qddot_b_cmd;
-    Eigen::VectorQd qddot_a_cmd;
-    Eigen::VectorVQd qdot_des;
-    Eigen::VectorVQd qddot_cmd;
-    Eigen::VectorXd qddot_qp; 
-    Eigen::VectorXd contact_wrench_qp; 
 
 private:
     RobotData &rd_;
 
+    CQuadraticProgram QP_Dyn_Wbc;
+        void calcCostGrad();
+        void calcCostHess();
+        void calcEqualityConstraint();
+        void calcInequalityConstraint();
+        void checkGradHessSize();
+
+        void updateContactState();
+        void updateRobotStates();
+        void calcDesiredJointAcceleration();
+
+        Eigen::MatrixXd Hess;  // HESSIAN
+        Eigen::VectorXd grad;  // GRADIENT
+        Eigen::MatrixXd A_const;    
+        Eigen::VectorXd lbA_const;  
+        Eigen::VectorXd ubA_const;  
+        std::vector<ConstraintMatrix> constraints_; // CONSTRAINTS
+        int total_num_state = 0;
+        int total_num_constraints = 0;
+
+    Eigen::VectorXd contact_wrench_cmd;
+    Eigen::VectorVQd qddot_cmd;
+    Eigen::VectorXd contact_wrench_qp; 
+    Eigen::VectorXd qddot_qp; 
+
     bool is_gradhess_init_ = true;
     bool is_wbc_init_ = true;
-    bool is_cannot_solve_qp_init_ = true;
+    bool is_cannot_solve_qp_ = true;
 
     double mu = 0.0;
     double foot_size = 0.0; 
     double foot_width = 0.0; 
-    double MG = 0.0;
 
     //--- Local eigen variables
     Eigen::MatrixVVd M; 
@@ -82,7 +81,6 @@ private:
 
     int contact_dim = 12;
     int contact_dim_prev = 12;
-    int base_dim = 6;
 };
 
 #endif  // DYN_WBC_H

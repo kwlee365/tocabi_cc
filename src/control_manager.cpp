@@ -4,11 +4,7 @@ using namespace TOCABI;
 
 ControlManager::ControlManager(RobotData& rd) : rd_(rd)
 {
-
-}
-
-void ControlManager::setRobotModel()
-{
+    // TODO : RBDL -> Pinocchio
     std::string urdf_path;
     ros::param::get("/tocabi_controller/urdf_path", urdf_path);
     RigidBodyDynamics::Addons::URDFReadFromFile(urdf_path.c_str(), &model_, true, false);
@@ -23,7 +19,6 @@ void ControlManager::update()
     updateContact();
 
     static bool is_cm_init = true;
-
     if(is_cm_init == true)
     {           
         saveInitialState();
@@ -50,6 +45,9 @@ void ControlManager::contactStateMachine()
     {
         // No contact change
     }
+
+    local_LF_contact = rd_.ee_[0].contact;
+    local_RF_contact = rd_.ee_[1].contact;
 }
 
 void ControlManager::mapGlobalToBase()
@@ -58,7 +56,7 @@ void ControlManager::mapGlobalToBase()
     base_pos = rd_.link_[Pelvis].xpos; 
     base_rot = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rd_.link_[Pelvis].rotm)(2)); 
     
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         //--- Base frame
         rd_.link_[idx].local_Jac_v             = base_rot.transpose() * rd_.link_[idx].Jac().topRows(3);    // TODO : Change Dynamics Library from RBDL to Pinocchio 
@@ -91,10 +89,7 @@ void ControlManager::mapGlobalToBase()
 
 void ControlManager::mapBaseToSupport()
 {
-    bool local_LF_contact = rd_.ee_[0].contact;
-    bool local_RF_contact = rd_.ee_[1].contact;
-
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         //--- Support frame
         if (local_LF_contact == true && local_RF_contact == true)
@@ -147,9 +142,6 @@ void ControlManager::updateDynamics()
 
 void ControlManager::updateContact()
 {
-    bool local_LF_contact = rd_.ee_[0].contact;
-    bool local_RF_contact = rd_.ee_[1].contact;
-
     rd_.ee_[0].v_contact = rd_.link_[Left_Foot].local_v;
     rd_.ee_[0].w_contact = rd_.link_[Left_Foot].local_w;
     rd_.ee_[1].v_contact = rd_.link_[Right_Foot].local_v;
@@ -183,7 +175,7 @@ void ControlManager::saveInitialState()
     rd_.q_desired_virtual = rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL);
     rd_.q_dot_desired_virtual.setZero();
 
-    for (int idx = 0; idx < LINK_NUMBER; idx++)
+    for (int idx = 0; idx < LINK_NUMBER + 1; idx++)
     {
         //--- Global frame
         rd_.link_[idx].rot_init = rd_.link_[idx].local_rotm;                             

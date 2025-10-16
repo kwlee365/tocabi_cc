@@ -9,10 +9,9 @@ CustomController::CustomController(RobotData &rd) : rd_(rd), cm_(rd), tm_(rd), k
     ControlVal_.setZero();
 
     //--- Class Initialization
-    cm_.setRobotModel();
     tm_.setControlFrequency(hz_);
-    kin_wbc_.setControlFrequency(hz_);
-    dyn_wbc_.setRobotSystemParameters(0.8, 0.3, 0.16);
+    dyn_wbc_.setFrictionCoefficient(0.8);
+    dyn_wbc_.setFootDimension(0.3, 0.16);
 
     //--- Joy Callback
     xbox_joy_sub_ = nh_cc_.subscribe<sensor_msgs::Joy>("/joy", 10, &CustomController::xBoxJoyCallback, this);
@@ -45,13 +44,14 @@ void CustomController::computeSlow()
     
     if (rd_.tc_.mode == 6)
     {   
+        CustomControllerInit();
         moveInitialPose();
     }
     else if (rd_.tc_.mode == 7)
     {
         cm_.update();
 
-        tm_.runTestMotion(motion_mode_, 3.0, 0.15, 0.2, 0.08, 0.6); 
+        tm_.runTestMotion(motion_mode_); 
 
         kin_wbc_.computeTaskSpaceKinematicWBC();
 
@@ -66,11 +66,110 @@ void CustomController::computeSlow()
 
 void CustomController::computeFast()
 {
+
 }
 
 void CustomController::computePlanner()
 {
+
 }
+
+void CustomController::CustomControllerInit()
+{
+    static bool is_cc_init = true;
+
+    if (is_cc_init == true)
+    {
+        loadParams();
+
+        q_init_ = rd_.q_;
+        WBC::SetContact(rd_, true, true);
+        
+        cout << "========== CUSTOMCONTROLLER IS NOW INITIALIZED ==========" << endl;
+        cout << "TIME: "<< rd_.control_time_ << endl; 
+
+        is_cc_init = false;
+    }
+}
+
+void CustomController::moveInitialPose()
+{
+    static int initial_tick = 0;
+
+    q_init_des; q_init_des.setZero();
+    q_init_des = q_init_;
+
+    if(motion_mode_ == TaskMotionType::Walking)
+    {
+        q_init_des(0) = 0.0; 
+        q_init_des(1) = 0.0; 
+        q_init_des(2) = -0.24; 
+        q_init_des(3) = 0.6; 
+        q_init_des(4) = -0.36; 
+        q_init_des(5) = 0.0; 
+
+        q_init_des(6)  = 0.0; 
+        q_init_des(7)  = 0.0; 
+        q_init_des(8)  = -0.24; 
+        q_init_des(9)  = 0.6; 
+        q_init_des(10) = -0.36; 
+        q_init_des(11) = 0.0;
+
+        q_init_des(15) = + 15.0 * DEG2RAD; 
+        q_init_des(16) = + 10.0 * DEG2RAD; 
+        q_init_des(17) = + 80.0 * DEG2RAD; 
+        q_init_des(18) = - 70.0 * DEG2RAD; 
+        q_init_des(19) = - 45.0 * DEG2RAD; 
+        q_init_des(21) =   0.0 * DEG2RAD; 
+
+        q_init_des(25) = - 15.0 * DEG2RAD; 
+        q_init_des(26) = - 10.0 * DEG2RAD;            
+        q_init_des(27) = - 80.0 * DEG2RAD;  
+        q_init_des(28) = + 70.0 * DEG2RAD; 
+        q_init_des(29) = + 45.0 * DEG2RAD;       
+        q_init_des(31) = - 0.0 * DEG2RAD; 
+    }
+    else
+    {
+        q_init_des(15) = 0.0;
+        q_init_des(16) = -0.3;
+        q_init_des(17) = 1.57;
+        q_init_des(18) = -1.2;
+        q_init_des(19) = -1.57; // elbow
+        q_init_des(20) = 1.5;
+        q_init_des(21) = 0.4;
+        q_init_des(22) = -0.2;
+
+        q_init_des(23) = 0.0; // yaw
+        q_init_des(24) = 0.0; // pitch
+
+        q_init_des(25) = 0.0;
+        q_init_des(26) = 0.3;
+        q_init_des(27) = -1.57;
+        q_init_des(28) = 1.2;
+        q_init_des(29) = 1.57; // elbow
+        q_init_des(30) = -1.5;
+        q_init_des(31) = -0.4;
+        q_init_des(32) = 0.2;
+    }
+    
+    rd_.q_desired = DyrosMath::cubicVector<MODEL_DOF>(initial_tick, 0, 2.0 * hz_, q_init_, q_init_des, Eigen::VectorQd::Zero(), Eigen::VectorQd::Zero()); 
+    rd_.torque_desired = (rd_.Kp_diag * (rd_.q_desired - rd_.q_)) - (rd_.Kd_diag * rd_.q_dot_);
+
+    initial_tick++;
+}
+
+//--- Joy Utils
+void CustomController::xBoxJoyCallback(const sensor_msgs::Joy::ConstPtr& joy)
+{
+    double vel_threshold = 0.1;
+
+    target_vel_x_   = DyrosMath::minmax_cut(joy->axes[1] * vel_threshold, -vel_threshold, vel_threshold);
+    target_vel_y_   = DyrosMath::minmax_cut(joy->axes[0] * vel_threshold, -vel_threshold, vel_threshold);
+    target_vel_yaw_ = DyrosMath::minmax_cut(joy->axes[3] * vel_threshold, -vel_threshold, vel_threshold);
+}
+
+//--- Parameter Loader
 
 void CustomController::loadParams()
 {
@@ -170,118 +269,29 @@ void CustomController::loadParams()
       : "Unknown";
 
     std::cout << "=====================================" << std::endl;
-    std::cout << "===== Motion Mode : " << mode_name << " ===== " << std::endl;
+    std::cout << "===== Motion Mode : " << mode_name << " =====" << std::endl;
     std::cout << "=====================================" << std::endl;
 
-    //--- Task Gain
-    rd_.link_[Pelvis].pos_p_gain     << 1.0, 1.0, 1.0;
-    rd_.link_[Upper_Body].pos_p_gain << 1.0, 1.0, 1.0;
-    rd_.link_[Left_Foot].pos_p_gain  << 1.0, 1.0, 1.0;
-    rd_.link_[Right_Foot].pos_p_gain << 1.0, 1.0, 1.0;
-    rd_.link_[Left_Hand].pos_p_gain  << 1.0, 1.0, 1.0;
-    rd_.link_[Right_Hand].pos_p_gain << 1.0, 1.0, 1.0;
-    rd_.link_[Pelvis].rot_p_gain     << 1.0, 1.0, 1.0;
-    rd_.link_[Upper_Body].rot_p_gain << 1.0, 0.0, 1.0;
-    rd_.link_[Head].rot_p_gain       << 1.0, 1.0, 1.0;
-    rd_.link_[Left_Foot].rot_p_gain  << 1.0, 1.0, 1.0;
-    rd_.link_[Right_Foot].rot_p_gain << 1.0, 1.0, 1.0;
-    rd_.link_[Left_Hand].rot_p_gain  << 1.0, 1.0, 1.0;
-    rd_.link_[Right_Hand].rot_p_gain << 1.0, 1.0, 1.0;
-}
+    //--- Task Parameter
+    double traj_time_, pelv_dist_, hand_dist_, foot_height_, step_duration_;
+    nh_cc_.getParam("/tocabi_controller/task_param/traj_time", traj_time_);
+    nh_cc_.getParam("/tocabi_controller/task_param/pelv_dist", pelv_dist_);
+    nh_cc_.getParam("/tocabi_controller/task_param/hand_dist", hand_dist_);
+    nh_cc_.getParam("/tocabi_controller/task_param/foot_height", foot_height_);
+    nh_cc_.getParam("/tocabi_controller/task_param/step_duration", step_duration_);
 
-void CustomController::CustomControllerInit()
-{
-    static bool is_cc_init = true;
+    tm_.setTrajectoryDuration(traj_time_);
+    tm_.setPelvisDistance(pelv_dist_);
+    tm_.setHandDistance(hand_dist_);
+    tm_.setFootHeight(foot_height_);
+    tm_.setStepDuration(step_duration_);
 
-    if (is_cc_init == true)
-    {
-        loadParams();
-
-        q_init_ = rd_.q_;
-        WBC::SetContact(rd_, true, true);
-        
-        cout << "CustomController IS NOW INITIALIZED" << endl;
-        cout << "TIME: "<< rd_.control_time_ << endl; 
-
-        is_cc_init = false;
-    }
-}
-
-void CustomController::moveInitialPose()
-{
-    CustomControllerInit();
-
-    static int initial_tick = 0;
-
-    q_init_des; q_init_des.setZero();
-    q_init_des = q_init_;
-
-    if(motion_mode_ == TaskMotionType::Walking)
-    {
-        q_init_des(0) = 0.0; 
-        q_init_des(1) = 0.0; 
-        q_init_des(2) = -0.24; 
-        q_init_des(3) = 0.6; 
-        q_init_des(4) = -0.36; 
-        q_init_des(5) = 0.0; 
-
-        q_init_des(6)  = 0.0; 
-        q_init_des(7)  = 0.0; 
-        q_init_des(8)  = -0.24; 
-        q_init_des(9)  = 0.6; 
-        q_init_des(10) = -0.36; 
-        q_init_des(11) = 0.0;
-
-        q_init_des(15) = + 15.0 * DEG2RAD; 
-        q_init_des(16) = + 10.0 * DEG2RAD; 
-        q_init_des(17) = + 80.0 * DEG2RAD; 
-        q_init_des(18) = - 70.0 * DEG2RAD; 
-        q_init_des(19) = - 45.0 * DEG2RAD; 
-        q_init_des(21) =   0.0 * DEG2RAD; 
-
-        q_init_des(25) = - 15.0 * DEG2RAD; 
-        q_init_des(26) = - 10.0 * DEG2RAD;            
-        q_init_des(27) = - 80.0 * DEG2RAD;  
-        q_init_des(28) = + 70.0 * DEG2RAD; 
-        q_init_des(29) = + 45.0 * DEG2RAD;       
-        q_init_des(31) = - 0.0 * DEG2RAD; 
-    }
-    else
-    {
-        q_init_des(15) = 0.0;
-        q_init_des(16) = -0.3;
-        q_init_des(17) = 1.57;
-        q_init_des(18) = -1.2;
-        q_init_des(19) = -1.57; // elbow
-        q_init_des(20) = 1.5;
-        q_init_des(21) = 0.4;
-        q_init_des(22) = -0.2;
-
-        q_init_des(23) = 0.0; // yaw
-        q_init_des(24) = 0.0; // pitch
-
-        q_init_des(25) = 0.0;
-        q_init_des(26) = 0.3;
-        q_init_des(27) = -1.57;
-        q_init_des(28) = 1.2;
-        q_init_des(29) = 1.57; // elbow
-        q_init_des(30) = -1.5;
-        q_init_des(31) = -0.4;
-        q_init_des(32) = 0.2;
-    }
-    
-    rd_.q_desired = DyrosMath::cubicVector<MODEL_DOF>(initial_tick, 0, 2.0 * hz_, q_init_, q_init_des, Eigen::VectorQd::Zero(), Eigen::VectorQd::Zero()); 
-    rd_.torque_desired = (rd_.Kp_diag * (rd_.q_desired - rd_.q_)) - (rd_.Kd_diag * rd_.q_dot_);
-
-    initial_tick++;
-}
-
-//--- Joy Utils
-void CustomController::xBoxJoyCallback(const sensor_msgs::Joy::ConstPtr& joy)
-{
-    double vel_threshold = 0.1;
-
-    target_vel_x_   = DyrosMath::minmax_cut(joy->axes[1] * vel_threshold, -vel_threshold, vel_threshold);
-    target_vel_y_   = DyrosMath::minmax_cut(joy->axes[0] * vel_threshold, -vel_threshold, vel_threshold);
-    target_vel_yaw_ = DyrosMath::minmax_cut(joy->axes[3] * vel_threshold, -vel_threshold, vel_threshold);
+    std::cout << "=====================================" << std::endl;
+    std::cout << "========== Task Parameters ========== " << std::endl;
+    std::cout << "Trajectory Time : " << traj_time_ << " sec" << std::endl;
+    std::cout << "Pelvis Distance : " << pelv_dist_ << " m" << std::endl;
+    std::cout << "Hand Distance : " << hand_dist_ << " m" << std::endl;
+    std::cout << "Foot Height : " << foot_height_ << " m" << std::endl;
+    std::cout << "Step Duration : " << step_duration_ << " sec" << std::endl;
+    std::cout << "=====================================" << std::endl;
 }

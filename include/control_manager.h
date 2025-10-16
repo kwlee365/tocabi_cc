@@ -11,7 +11,6 @@ class ControlManager
 public:
     ControlManager(RobotData &rd);
 
-    void setRobotModel();
     void update();
     void saveInitialState();
 
@@ -27,6 +26,7 @@ private:
     void updateContact();
 
     Eigen::Vector3d base_pos; 
-    Eigen::Matrix3d base_rot; 
-    
+    Eigen::Matrix3d base_rot;
+    bool local_LF_contact = false;
+    bool local_RF_contact = false;
 };

@@ -5,7 +5,8 @@ using namespace TOCABI;
 KinWBC::KinWBC(RobotData& rd) : rd_(rd) 
 {
     task_hierarchy = {
-        {{Pelvis, TaskType::Position} , {Pelvis, TaskType::Orientation}},
+        {{Pelvis, TaskType::Orientation}},
+        {{COM_id, TaskType::Position}},
         {{Left_Foot, TaskType::Position}, {Left_Foot, TaskType::Orientation}, {Right_Foot, TaskType::Position}, {Right_Foot, TaskType::Orientation}},
         {{Head, TaskType::Orientation}},
         {{Left_Hand, TaskType::Position}, {Left_Hand, TaskType::Orientation}, {Right_Hand, TaskType::Position}, {Right_Hand, TaskType::Orientation}}};
@@ -30,8 +31,6 @@ void KinWBC::computeTaskSpaceKinematicWBC()
 
             if (type == TaskType::Position)
             {
-                Eigen::Vector3d Kp_vec = rd_.link_[idx].pos_p_gain; 
-
                 J.block(3 * i, 0, 3, MODEL_DOF_VIRTUAL) = rd_.link_[idx].local_Jac_v;
                 Eigen::Vector3d pos_err = rd_.link_[idx].x_traj - rd_.link_[idx].local_xpos;
 
@@ -40,8 +39,6 @@ void KinWBC::computeTaskSpaceKinematicWBC()
             }
             else if (type == TaskType::Orientation)
             {
-                Eigen::Vector3d Kp_vec = rd_.link_[idx].rot_p_gain; 
-                
                 J.block(3 * i, 0, 3, MODEL_DOF_VIRTUAL) = rd_.link_[idx].local_Jac_w;
                 Eigen::Vector3d ori_err = -DyrosMath::getPhi(rd_.link_[idx].local_rotm, rd_.link_[idx].r_traj);
 
@@ -67,7 +64,6 @@ void KinWBC::computeTaskSpaceKinematicWBC()
     rd_.q_dot_desired_virtual = qdot_des;
     rd_.q_dot_desired = rd_.q_dot_desired_virtual.tail(MODEL_DOF);
 
-    // rd_.q_desired_virtual += rd_.q_dot_desired_virtual / hz_;
     rd_.q_desired_virtual = rd_.local_q_virtual_.head(MODEL_DOF_VIRTUAL) + rd_.q_dot_desired_virtual;
     rd_.q_desired = rd_.q_desired_virtual.tail(MODEL_DOF);
 }
@@ -127,7 +123,7 @@ Eigen::VectorVQd KinWBC::safetyFilter()
     else
     {
         //--- CONSTRAINTS VIOLATION CHECKER
-        if(is_cannot_solve_qp_init_ == true)   
+        if(is_cannot_solve_qp_ == true)   
         {
             Eigen::VectorXd Ax = A_const * X_; 
 
@@ -148,9 +144,8 @@ Eigen::VectorVQd KinWBC::safetyFilter()
                     std::cerr << "[Constraint Violation] Row " << i << ": " << val << " > ubA = " << u << std::endl;
                 }
             }
-            is_cannot_solve_qp_init_ = false;
+            is_cannot_solve_qp_ = false;
         }
-
 
         qdot_safety.setZero();
         std::cout << "Kin WBC SolveQPoases ERROR: Unable to find a valid solution." << std::endl;
@@ -264,9 +259,4 @@ void KinWBC::checkGradHessSize()
 
         is_gradhess_init_ = false;
     }
-}
-
-void KinWBC::setControlFrequency(double &hz)
-{
-    hz_ = hz;
 }
