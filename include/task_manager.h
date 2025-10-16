@@ -19,6 +19,7 @@ public:
   void setTrajectoryDuration(double &traj_time_);
   void setPelvisDistance(double &pelv_dist_);
   void setHandDistance(double &hand_dist_);
+  void setStepStride(double &step_length_);
   void setFootHeight(double &foot_height_);
   void setStepDuration(double &step_duration_);
 
@@ -35,6 +36,7 @@ private:
   double traj_time = 0.0;
   double pelv_dist = 0.0;
   double hand_dist = 0.0;
+  double step_length = 0.0;
   double foot_height = 0.0;
   double step_duration = 0.0;
 };

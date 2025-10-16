@@ -58,9 +58,15 @@ joint_limits:  # TODO : check the limits
 
 task_param:
   traj_time: 3.0
-  pelv_dist: 0.12
+  pelv_dist: 0.15
   hand_dist: 0.2
-  foot_height: 0.08
+  step_length: 0.2
+  foot_height: 0.05
   step_duration: 0.6
+
+wbid:
+  W_qddot : 1.0
+  W_cwr : 1e-5
+  W_energy : 1.0
 
 motion_mode : 3

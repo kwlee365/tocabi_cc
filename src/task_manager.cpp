@@ -43,9 +43,9 @@ void TaskManager::movePelvHandPose()
     }
 
     //--- Pelvis Trajectory
-    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].support_xpos_init;
-    rd_.link_[COM_id].x_desired(1) = rd_.link_[COM_id].support_xpos_init(1) + pelv_dist;
-    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].x_desired - rd_.link_[Pelvis].support_xpos;
+    rd_.link_[Pelvis].x_desired    = rd_.link_[Pelvis].support_xpos_init;
+    rd_.link_[Pelvis].x_desired(1) = rd_.link_[Pelvis].support_xpos_init(1) + pelv_dist;
+    rd_.link_[Pelvis].x_desired    = rd_.link_[Pelvis].x_desired - rd_.link_[Pelvis].support_xpos;
 
     //--- Both Hand Trajectories
     for (int idx = 1; idx < 3; idx++)
@@ -75,9 +75,9 @@ void TaskManager::moveTaichiMotion()
     }
 
     //--- Pelvis Trajectory
-    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].support_xpos_init;
-    rd_.link_[COM_id].x_desired(1) = rd_.link_[COM_id].support_xpos_init(1) + pelv_dist;
-    rd_.link_[COM_id].x_desired    = rd_.link_[COM_id].x_desired - rd_.link_[Pelvis].support_xpos;
+    rd_.link_[Pelvis].x_desired    = rd_.link_[Pelvis].support_xpos_init;
+    rd_.link_[Pelvis].x_desired(1) = rd_.link_[Pelvis].support_xpos_init(1) + pelv_dist;
+    rd_.link_[Pelvis].x_desired    = rd_.link_[Pelvis].x_desired - rd_.link_[Pelvis].support_xpos;
 
     //--- Hand Trajectory
     for (int idx = 1; idx < 3; idx++)
@@ -128,14 +128,14 @@ void TaskManager::bipedalWalkingController()
     if(is_wm_init == true)
     {
         wm_.setControlFrequency(hz_);
-        wm_.setCenterOfMassHeight(rd_.link_[COM_id].support_xpos_init(2));
+        wm_.setCenterOfMassHeight(rd_.link_[Pelvis].support_xpos_init(2));
         wm_.setTransferDuration(2.0);
 
         is_wm_init = false;
     } 
 
     wm_.updateContactState(rd_.ee_[0].contact, rd_.ee_[1].contact);
-    wm_.setWalkingParameter(0.0, 0.0, foot_height);
+    wm_.setWalkingParameter(step_length, 0.0, foot_height);
     wm_.setStepDuration(step_duration);
 
     wm_.computeWalkingMotion();
@@ -160,6 +160,11 @@ void TaskManager::setPelvisDistance(double &pelv_dist_)
 void TaskManager::setHandDistance(double &hand_dist_)
 {
     hand_dist = hand_dist_;
+}
+
+void TaskManager::setStepStride(double &step_length_)
+{
+    step_length = step_length_;
 }
 
 void TaskManager::setFootHeight(double &foot_height_)

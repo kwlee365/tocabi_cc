@@ -5,8 +5,7 @@ using namespace TOCABI;
 KinWBC::KinWBC(RobotData& rd) : rd_(rd) 
 {
     task_hierarchy = {
-        {{Pelvis, TaskType::Orientation}},
-        {{COM_id, TaskType::Position}},
+        {{Pelvis, TaskType::Position}, {Pelvis, TaskType::Orientation}},
         {{Left_Foot, TaskType::Position}, {Left_Foot, TaskType::Orientation}, {Right_Foot, TaskType::Position}, {Right_Foot, TaskType::Orientation}},
         {{Head, TaskType::Orientation}},
         {{Left_Hand, TaskType::Position}, {Left_Hand, TaskType::Orientation}, {Right_Hand, TaskType::Position}, {Right_Hand, TaskType::Orientation}}};
@@ -34,16 +33,14 @@ void KinWBC::computeTaskSpaceKinematicWBC()
                 J.block(3 * i, 0, 3, MODEL_DOF_VIRTUAL) = rd_.link_[idx].local_Jac_v;
                 Eigen::Vector3d pos_err = rd_.link_[idx].x_traj - rd_.link_[idx].local_xpos;
 
-                // e.segment<3>(3 * i)   = pos_err;
-                de.segment<3>(3 * i)  = rd_.link_[idx].v_traj + pos_err;
+                de.segment<3>(3 * i) = pos_err;
             }
             else if (type == TaskType::Orientation)
             {
                 J.block(3 * i, 0, 3, MODEL_DOF_VIRTUAL) = rd_.link_[idx].local_Jac_w;
                 Eigen::Vector3d ori_err = -DyrosMath::getPhi(rd_.link_[idx].local_rotm, rd_.link_[idx].r_traj);
 
-                // e.segment<3>(3 * i)   = ori_err;
-                de.segment<3>(3 * i)  = rd_.link_[idx].w_traj + ori_err;
+                de.segment<3>(3 * i) = ori_err;
             }
             else
             {

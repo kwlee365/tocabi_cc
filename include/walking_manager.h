@@ -62,9 +62,4 @@ bool local_RF_contact = true;
 bool is_support_transition = false;
 bool is_footstep_update = false;
 bool is_cp_eos_update = false;
-
-Eigen::Vector2d cp_desired;
-Eigen::Vector2d cp_desired_prev;
-Eigen::Vector2d com_desired_prev;
-
 };

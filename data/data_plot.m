@@ -1,19 +1,7 @@
 clc
 clear all
 close all
-
-dataWBC = readmatrix('dataCC1.txt');
-torque_sol = dataWBC(:, 1:33);
-figure()
-sgtitle('torque')
-for cnt = 1:1:6
-% cnt = 10 
-    plot(torque_sol(:,cnt))    
-    hold on
-    legend()
-end
-
-%%
+%
 clc
 clear all
 close all
@@ -24,14 +12,14 @@ data = readmatrix('dataWM2.txt');
 right_foot_pos= data(:, 1:6);
 data = readmatrix('dataWM3.txt');
 pelv_pos = data(:, 1:6);
-data = readmatrix('dataWM4.txt');
-cp_pos = data(:, 1:4);
+
+
 figure()
 
 w = sqrt(9.81 / 0.73)
 
 start_cnt = 0;
-for cnt = 1:1:3
+for cnt = 1:1:2
     subplot(3,1,cnt)
     
     plot(left_foot_pos(:,start_cnt + cnt));
@@ -41,17 +29,43 @@ for cnt = 1:1:3
     plot(right_foot_pos(:, start_cnt + cnt + 3))
     plot(pelv_pos(:,start_cnt + cnt));
     plot(pelv_pos(:,start_cnt + cnt + 3));
-    % plot(cp_pos(:,start_cnt + cnt));
-    % plot(cp_pos(:,start_cnt + cnt + 2));
+
+    % ylim([-0.3, 0.3])
+
     legend('lfoot traj', 'lfoot cur', 'rfoot traj', 'rfoot cur', 'pelv traj', 'pelv cur');
 end
 
-data = readmatrix('dataWM5.txt');
-t = data(:, 1);
-T = data(:, 2);
+%%
+data = readmatrix('dataCC1.txt');
+LF = data(:, 3);
+RF = data(:, 9);
 
 
 figure()
-plot(t(:,1))
+plot(LF(:,1))
 hold on
-plot(T(:,1))
+plot(RF(:,1))
+
+data = readmatrix('dataCC2.txt');
+torque_sol = data(:, 1:33);
+
+figure()
+sgtitle('TORQUE LEG')
+for cnt = 1:1:12
+    plot(torque_sol(:,cnt))    
+    hold on
+end
+
+figure()
+sgtitle('TORQUE WAIST')
+for cnt = 13:1:15
+    plot(torque_sol(:,cnt))    
+    hold on
+end
+
+figure()
+sgtitle('TORQUE UPPER')
+for cnt = 16:1:33
+    plot(torque_sol(:,cnt))    
+    hold on
+end

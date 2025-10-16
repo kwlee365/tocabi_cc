@@ -2,6 +2,9 @@
 
 using namespace TOCABI;
 
+ofstream dataCC1("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC1.txt");
+ofstream dataCC2("/home/kwan/catkin_ws/src/tocabi_cc/data/dataCC2.txt");
+
 CustomController::CustomController(RobotData &rd) : rd_(rd), cm_(rd), tm_(rd), kin_wbc_(rd), dyn_wbc_(rd)
 {
     //--- ROS Node Handle
@@ -57,6 +60,10 @@ void CustomController::computeSlow()
 
         dyn_wbc_.computeDynamicWBC();
         dyn_wbc_.computeTotalTorqueCommand();
+
+        dataCC1 << rd_.LF_FT.transpose() << " " << rd_.RF_FT.transpose() << std::endl;
+        dataCC2 << rd_.torque_desired.transpose() << std::endl;
+
     }
     else
     {
@@ -273,16 +280,18 @@ void CustomController::loadParams()
     std::cout << "=====================================" << std::endl;
 
     //--- Task Parameter
-    double traj_time_, pelv_dist_, hand_dist_, foot_height_, step_duration_;
+    double traj_time_, pelv_dist_, hand_dist_, step_length_, foot_height_, step_duration_;
     nh_cc_.getParam("/tocabi_controller/task_param/traj_time", traj_time_);
     nh_cc_.getParam("/tocabi_controller/task_param/pelv_dist", pelv_dist_);
     nh_cc_.getParam("/tocabi_controller/task_param/hand_dist", hand_dist_);
+    nh_cc_.getParam("/tocabi_controller/task_param/step_length", step_length_);
     nh_cc_.getParam("/tocabi_controller/task_param/foot_height", foot_height_);
     nh_cc_.getParam("/tocabi_controller/task_param/step_duration", step_duration_);
 
     tm_.setTrajectoryDuration(traj_time_);
     tm_.setPelvisDistance(pelv_dist_);
     tm_.setHandDistance(hand_dist_);
+    tm_.setStepStride(step_length_);
     tm_.setFootHeight(foot_height_);
     tm_.setStepDuration(step_duration_);
 
@@ -291,7 +300,24 @@ void CustomController::loadParams()
     std::cout << "Trajectory Time : " << traj_time_ << " sec" << std::endl;
     std::cout << "Pelvis Distance : " << pelv_dist_ << " m" << std::endl;
     std::cout << "Hand Distance : " << hand_dist_ << " m" << std::endl;
+    std::cout << "Step Length : " << step_length_ << " m" << std::endl;
     std::cout << "Foot Height : " << foot_height_ << " m" << std::endl;
     std::cout << "Step Duration : " << step_duration_ << " sec" << std::endl;
     std::cout << "=====================================" << std::endl;
+
+    //--- Whole-body Inverse Dynamics
+    double W_qddot, W_cwr, W_energy;
+    nh_cc_.getParam("/tocabi_controller/wbid/W_qddot", W_qddot);
+    nh_cc_.getParam("/tocabi_controller/wbid/W_cwr", W_cwr);
+    nh_cc_.getParam("/tocabi_controller/wbid/W_energy", W_energy);
+
+    dyn_wbc_.setJointTrackingWeight(W_qddot);
+    dyn_wbc_.setContactWrenchRegularizationWeight(W_cwr);
+    dyn_wbc_.setAccelEnergyMinimizationWeight(W_energy);
+
+    std::cout << "=====================================" << std::endl;
+    std::cout << "========== WBID Parameters ========== " << std::endl;
+    std::cout << "W_qddot : " << W_qddot  << std::endl;
+    std::cout << "W_cwr : " << W_cwr  << std::endl;
+    std::cout << "W_energy : " << W_energy  << std::endl;
 }

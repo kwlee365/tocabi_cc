@@ -21,6 +21,9 @@ public:
     //--- Setter
     void setFrictionCoefficient(const double& mu_);
     void setFootDimension(const double& foot_size_, const double& foot_width_);
+    void setJointTrackingWeight(const double& W_qddot_);
+    void setContactWrenchRegularizationWeight(const double& W_cwr_);
+    void setAccelEnergyMinimizationWeight(const double& W_energy_);
 
 
 private:
@@ -75,8 +78,8 @@ private:
     Eigen::VectorXd lbA_fric;
     Eigen::VectorXd ubA_fric;
 
-    double W_cwr = 1e-5;
     double W_qddot = 1.0;
+    double W_cwr = 1e-5;
     double W_energy = 1.0;
 
     int contact_dim = 12;

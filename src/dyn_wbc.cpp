@@ -114,9 +114,13 @@ void DynWBC::calcDesiredJointAcceleration()
 
 void DynWBC::computeTotalTorqueCommand()
 {
-    Eigen::VectorQd torque_inv_dyn = (rd_.local_A * qddot_qp + rd_.local_G - rd_.local_J_C.transpose() * contact_wrench_qp).tail(MODEL_DOF);
-    Eigen::VectorQd torque_pd      = rd_.Kp_diag * (rd_.q_desired - rd_.q_) + rd_.Kd_diag * (rd_.q_dot_desired - rd_.q_dot_);
-    Eigen::VectorQd torque_sum     = torque_inv_dyn + torque_pd;
+    Eigen::VectorQd torque_inv_dyn; torque_inv_dyn.setZero();
+    torque_inv_dyn = (rd_.local_A * qddot_qp + rd_.local_G - rd_.local_J_C.transpose() * contact_wrench_qp).tail(MODEL_DOF);
+
+    Eigen::VectorQd torque_pd; torque_pd.setZero();
+    torque_pd = (rd_.Kp_diag / 3.0) * (rd_.q_desired - rd_.q_) + (rd_.Kd_diag / 1.0) * (rd_.q_dot_desired - rd_.q_dot_);
+
+    Eigen::VectorQd torque_sum = torque_inv_dyn + torque_pd;
 
     // --- Torque initialization
     static bool is_torque_save_init = true;
@@ -224,7 +228,7 @@ void DynWBC::calcEqualityConstraint()
         }
     }
 
-    constraints_.push_back({A_cc, lbA_cc, ubA_cc});
+    // constraints_.push_back({A_cc, lbA_cc, ubA_cc});
 }
 
 void DynWBC::calcInequalityConstraint()
@@ -348,4 +352,19 @@ void DynWBC::setFootDimension(const double& foot_size_, const double& foot_width
 {
     foot_size = foot_size_; 
     foot_width = foot_width_; 
+}
+
+void DynWBC::setJointTrackingWeight(const double &W_qddot_)
+{
+    W_qddot = W_qddot_;
+}
+
+void DynWBC::setContactWrenchRegularizationWeight(const double &W_cwr_)
+{
+    W_cwr = W_cwr_;
+}
+
+void DynWBC::setAccelEnergyMinimizationWeight(const double &W_energy_)
+{
+    W_energy = W_energy_;
 }
